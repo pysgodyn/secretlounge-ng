@@ -50,21 +50,18 @@ def register_tasks(sched):
 
 
 s_active_users = {}
-def active_user_stat(x):
-	if x == "active_users_15m":
-		d = timedelta(minutes=15)
-	elif x == "active_users_1h":
-		d = timedelta(hours=1)
-	elif x == "active_users_12h":
-		d = timedelta(hours=12)
-	n = 0
+def active_user_stat():
+	d = {
+		"active_users_15m": timedelta(minutes=15),
+		"active_users_1h": timedelta(hours=1),
+		"active_users_12h": timedelta(hours=12),
+	}
+	res = {key: 0 for key in d.keys()}
 	for last_active in s_active_users.values():
-		if datetime.now() - last_active <= d:
-			n += 1
-	return n
-
-for x in ("active_users_15m", "active_users_1h", "active_users_12h"):
-	stats.register_source(x, lambda x=x: active_user_stat(x))
+		for key, delta in d.items():
+			res[key] += 1 if (datetime.now() - last_active <= delta) else 0
+	return res
+stats.register_source(active_user_stat)
 
 def updateUserFromEvent(user, c_user):
 	user.username = c_user.username
@@ -460,7 +457,6 @@ def give_karma(user, msid):
 	return rp.Reply(rp.types.KARMA_THANK_YOU)
 
 
-s_messages_sent = stats.countable_source("messages_sent")
 @requireUser
 def prepare_user_message(user, msg_score, is_media):
 	if user.isInCooldown():
@@ -471,7 +467,6 @@ def prepare_user_message(user, msg_score, is_media):
 	ok = spam_scores.increaseSpamScore(user.id, msg_score)
 	if not ok:
 		return rp.Reply(rp.types.ERR_SPAMMY)
-	s_messages_sent(1)
 	return ch.assignMessageId(CachedMessage(user.id))
 
 @requireUser
@@ -499,7 +494,6 @@ def send_signed_user_message(user, msg_score, text, reply_msid=None, tripcode=Fa
 		m = rp.Reply(rp.types.SIGNED_MSG, text=text, user_id=user.id, user_text=user.getFormattedName())
 
 	msid = ch.assignMessageId(CachedMessage(user.id))
-	s_messages_sent(1)
 	Sender.reply(m, msid, None, user, reply_msid)
 	return msid
 
