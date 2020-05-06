@@ -377,6 +377,21 @@ def warn_user(user, msid, delete=False):
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
+@requireRank(RANKS.mod)
+def remove(user, msid, reason):
+    cm = ch.getMessage(msid)
+    if cm is None or cm.user_id is None:
+        return rp.Reply(rp.types.ERR_NOT_IN_CACHE)
+
+    user2 = db.getUser(id=cm.user_id)
+    _push_system_message(
+        rp.Reply(rp.types.MESSAGE_REMOVED, reason=reason),
+        who=user2, reply_to=msid)
+    Sender.delete(msid)
+    logging.info("%s had a message removed by %s for: %s", user2, user, reason)
+    return rp.Reply(rp.types.SUCCESS)
+
+@requireUser
 @requireRank(RANKS.admin)
 def uncooldown_user(user, oid2=None, username2=None):
 	if oid2 is not None:

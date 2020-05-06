@@ -37,6 +37,7 @@ types = NumericEnum([
 	"USER_IN_CHAT",
 	"USER_NOT_IN_CHAT",
 	"GIVEN_COOLDOWN",
+	"MESSAGE_REMOVED",
 	"PROMOTED_MOD",
 	"PROMOTED_ADMIN",
 	"KARMA_THANK_YOU",
@@ -100,6 +101,8 @@ format_strs = {
 	types.GIVEN_COOLDOWN: lambda deleted, **_:
 		em( "You've been handed a cooldown of {duration!d} for this message"+
 			(deleted and " (message also deleted)" or "") ),
+	types.MESSAGE_REMOVED: lambda reason, **_:
+		em("Your message has been removed" + (reason and " for {reason!x}. " or ". ") + "No cooldown has been given, but refrain from posting the message again."),
 	types.PROMOTED_MOD: em("You've been promoted to moderator, run /modhelp for a list of commands."),
 	types.PROMOTED_ADMIN: em("You've been promoted to admin, run /adminhelp for a list of commands."),
 	types.KARMA_THANK_YOU: em("You just gave this user some sweet karma, awesome!"),
@@ -157,7 +160,8 @@ format_strs = {
 		"<i>Or reply to a message and use</i>:\n"+
 		"  /info - get info about the user that sent this message\n"+
 		"  /warn - warn the user that sent this message (cooldown)\n"+
-		"  /delete - delete a message and warn the user",
+		"  /delete - delete a message and warn the user\n"+
+		"  /remove [reason] - delete a message without a cooldown",
 	types.HELP_ADMIN:
 		"<i>Admins can use the following commands</i>:\n"+
 		"  /adminhelp - show this text\n"+

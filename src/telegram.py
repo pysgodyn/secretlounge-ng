@@ -41,7 +41,7 @@ def init(config, _db, _ch):
 	cmds = [
 		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma",
 		"version", "source", "modhelp", "adminhelp", "modsay", "adminsay", "mod",
-		"admin", "warn", "delete", "uncooldown", "blacklist", "s", "sign",
+		"admin", "warn", "delete", "remove", "uncooldown", "blacklist", "s", "sign",
 		"tripcode", "settripcode", "t", "tsign"
 	]
 	for c in cmds: # maps /<c> to the function cmd_<c>
@@ -467,6 +467,19 @@ def cmd_uncooldown(ev, arg):
 		username = arg
 
 	send_answer(ev, core.uncooldown_user(c_user, oid, username), True)
+
+@takesArgument(optional=True)
+def cmd_remove(ev, arg):
+    c_user = UserContainer(ev.from_user)
+
+    if ev.reply_to_message is None:
+        return send_answer(ev, rp.Reply(rp.types.ERR_NO_REPLY), True)
+
+    reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
+    if reply_msid is None:
+        return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
+
+    send_answer(ev, core.remove(c_user, reply_msid, arg), True)
 
 @takesArgument(optional=True)
 def cmd_blacklist(ev, arg):
