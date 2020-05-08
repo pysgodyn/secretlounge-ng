@@ -40,9 +40,9 @@ def init(config, _db, _ch):
 
 	cmds = [
 		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma",
-		"version", "source", "modhelp", "adminhelp", "modsay", "adminsay", "mod",
-		"admin", "warn", "delete", "remove", "uncooldown", "blacklist", "s", "sign",
-		"tripcode", "settripcode", "t", "tsign"
+		"version", "source", "modhelp", "adminhelp", "ownerhelp", "sysophelp", "modsay", "adminsay", "ownersay",
+		"sysopsay", "mod", "admin", "warn", "delete", "remove", "uncooldown", "blacklist",
+		"s", "sign", "tripcode", "settripcode", "t", "tsign"
 	]
 	for c in cmds: # maps /<c> to the function cmd_<c>
 		c = c.lower()
@@ -413,6 +413,12 @@ def cmd_modhelp(ev):
 def cmd_adminhelp(ev):
 	send_answer(ev, rp.Reply(rp.types.HELP_ADMIN), True)
 
+def cmd_ownerhelp(ev):
+	send_answer(ev, rp.Reply(rp.types.HELP_OWNER), True)
+
+def cmd_sysophelp(ev):
+	send_answer(ev, rp.Reply(rp.types.HELP_SYSOP), True)
+
 def cmd_version(ev):
 	send_answer(ev, rp.Reply(rp.types.PROGRAM_VERSION, version=VERSION), True)
 
@@ -430,6 +436,18 @@ def cmd_adminsay(ev, arg):
 	c_user = UserContainer(ev.from_user)
 	arg = escape_html(arg)
 	return send_answer(ev, core.send_admin_message(c_user, arg), True)
+
+@takesArgument()
+def cmd_ownersay(ev, arg):
+	c_user = UserContainer(ev.from_user)
+	arg = escape_html(arg)
+	return send_answer(ev, core.send_owner_message(c_user, arg), True)
+
+@takesArgument()
+def cmd_sysopsay(ev, arg):
+	c_user = UserContainer(ev.from_user)
+	arg = escape_html(arg)
+	return send_answer(ev, core.send_sysop_message(c_user, arg), True)
 
 @takesArgument()
 def cmd_mod(ev, arg):

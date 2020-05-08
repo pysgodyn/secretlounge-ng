@@ -70,6 +70,8 @@ types = NumericEnum([
 	"PROGRAM_VERSION",
 	"HELP_MODERATOR",
 	"HELP_ADMIN",
+	"HELP_OWNER",
+	"HELP_SYSOP",
 ])
 
 # formatting of these as user-readable text
@@ -98,9 +100,10 @@ format_strs = {
 	types.CHAT_LEAVE: em("You left the chat!"),
 	types.USER_IN_CHAT: em("You're already in the chat."),
 	types.USER_NOT_IN_CHAT: em("You're not in the chat yet. Use /start to join!"),
-	types.GIVEN_COOLDOWN: lambda deleted, **_:
+	types.GIVEN_COOLDOWN: lambda deleted, contact, **_:
 		em( "You've been handed a cooldown of {duration!d} for this message"+
-			(deleted and " (message also deleted)" or "") ),
+			(deleted and " (message also deleted)" or "") )+
+			( em( "\nUnjustified? Contact:") + " {contact}" + " to appeal.") if contact else "",
 	types.MESSAGE_REMOVED: lambda reason, **_:
 		em("Your message has been removed" + (reason and " for {reason!x}. " or ". ") + "No cooldown has been given, but refrain from posting the message again."),
 	types.PROMOTED_MOD: em("You've been promoted to moderator, run /modhelp for a list of commands."),
@@ -123,7 +126,7 @@ format_strs = {
 	types.ERR_NOT_IN_COOLDOWN: em("This user is not in a cooldown right now."),
 	types.ERR_BLACKLISTED: lambda reason, contact, **_:
 		em( "You've been blacklisted" + (reason and " for {reason!x}" or "") )+
-		( em("\ncontact:") + " {contact}" ) if contact else "",
+		( em("\nContact:") + " {contact}" + " to appeal." ) if contact else "",
 	types.ERR_ALREADY_UPVOTED: em("You have already upvoted this message."),
 	types.ERR_UPVOTE_OWN_MESSAGE: em("You can't upvote your own message."),
 	types.ERR_SPAMMY: em("Your message has not been sent. Avoid sending messages too fast, try again later."),
@@ -151,7 +154,9 @@ format_strs = {
 		"<b>{active}</b> <i>active</i>, {inactive} <i>inactive and</i> "+
 		"{blacklisted} <i>blacklisted users</i> (<i>total</i>: {total})",
 
-	types.PROGRAM_VERSION: "secretlounge-ng v{version} ~ https://github.com/sfan5/secretlounge-ng",
+	types.PROGRAM_VERSION:
+		"secretlounge-ng v{version}, by sfan5 ~ https://github.com/sfan5/secretlounge-ng" +
+		"\nThis bot is running on pysgodyn's fork",
 	types.HELP_MODERATOR:
 		"<i>Moderators can use the following commands</i>:\n"+
 		"  /modhelp - show this text\n"+
@@ -166,13 +171,25 @@ format_strs = {
 		"<i>Admins can use the following commands</i>:\n"+
 		"  /adminhelp - show this text\n"+
 		"  /adminsay &lt;message&gt; - send an official admin message\n"+
-		"  /motd &lt;message&gt; - set the welcome message (HTML formatted)\n"+
+		"\n"+
+		"<i>Or reply to a message and use</i>:\n"+
+		"  /blacklist [reason] - blacklist the user who sent this message",
+	types.HELP_OWNER:
+		"<i>Owners can use the following commands</i>:\n"+
+		"  /ownerhelp - show this text\n"+
+		"  /ownersay &lt;message&gt; - send an official admin message\n"+
 		"  /uncooldown &lt;id | username&gt; - remove cooldown from an user\n"+
 		"  /mod &lt;username&gt; - promote an user to the moderator rank\n"+
 		"  /admin &lt;username&gt; - promote an user to the admin rank\n"+
 		"\n"+
-		"<i>Or reply to a message and use</i>:\n"+
-		"  /blacklist [reason] - blacklist the user who sent this message",
+		"<i>Along with all admin and mod commands</i>",
+	types.HELP_SYSOP:
+		"<i>System Operators can use the following commands</i>:\n"+
+		"  /sysophelp - show this text\n"+
+		"  /sysopsay &lt;message&gt; - send an official sysop message\n"+
+		"  /motd &lt;message&gt; - set the welcome message (HTML formatted)\n"+
+		"\n"+
+		"<i>Along with all other commands</i>\n",
 }
 
 def formatForTelegram(m):

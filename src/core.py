@@ -199,7 +199,7 @@ def user_join(c_user):
 	user.id = c_user.id
 	updateUserFromEvent(user, c_user)
 	if not any(db.iterateUserIds()):
-		user.rank = RANKS.admin
+		user.rank = RANKS.sysop
 
 	logging.info("%s joined chat", user)
 	db.addUser(user)
@@ -276,7 +276,7 @@ def get_motd(user):
 	return rp.Reply(rp.types.CUSTOM, text=motd)
 
 @requireUser
-@requireRank(RANKS.admin)
+@requireRank(RANKS.sysop)
 def set_motd(user, arg):
 	with db.modifySystemConfig() as config:
 		config.motd = arg
@@ -320,7 +320,7 @@ def set_tripcode(user, text):
 	return rp.Reply(rp.types.TRIPCODE_SET, tripname=tripname, tripcode=tripcode)
 
 @requireUser
-@requireRank(RANKS.admin)
+@requireRank(RANKS.owner)
 def promote_user(user, username2, rank):
 	user2 = getUserByName(username2)
 	if user2 is None:
@@ -353,6 +353,22 @@ def send_admin_message(user, arg):
 	logging.info("%s sent admin message: %s", user, arg)
 
 @requireUser
+@requireRank(RANKS.owner)
+def send_owner_message(user, arg):
+	text = arg + " ~<b>owner</b>"
+	m = rp.Reply(rp.types.CUSTOM, text=text)
+	_push_system_message(m)
+	logging.info("%s sent owner message: %s", user, arg)
+
+@requireUser
+@requireRank(RANKS.sysop)
+def send_sysop_message(user, arg):
+	text = arg + " ~<b>sysop</b>"
+	m = rp.Reply(rp.types.CUSTOM, text=text)
+	_push_system_message(m)
+	logging.info("%s sent sysop message: %s", user, arg)
+
+@requireUser
 @requireRank(RANKS.mod)
 def warn_user(user, msid, delete=False):
 	cm = ch.getMessage(msid)
@@ -364,7 +380,7 @@ def warn_user(user, msid, delete=False):
 			d = user2.addWarning()
 			user2.karma -= KARMA_WARN_PENALTY
 		_push_system_message(
-			rp.Reply(rp.types.GIVEN_COOLDOWN, duration=d, deleted=delete),
+			rp.Reply(rp.types.GIVEN_COOLDOWN, duration=d, deleted=delete, contact=blacklist_contact),
 			who=user2, reply_to=msid)
 		cm.warned = True
 	else:
@@ -392,7 +408,7 @@ def remove(user, msid, reason):
     return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
-@requireRank(RANKS.admin)
+@requireRank(RANKS.owner)
 def uncooldown_user(user, oid2=None, username2=None):
 	if oid2 is not None:
 		user2 = getUserByOid(oid2)

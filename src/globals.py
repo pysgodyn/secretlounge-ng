@@ -41,6 +41,8 @@ VERSION = "1.6"
 
 # Ranks
 RANKS = Enum({
+	"sysop": 10000,
+	"owner": 1000,
 	"admin": 100,
 	"mod": 10,
 	"user": 0,
