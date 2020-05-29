@@ -63,6 +63,17 @@ def getUserByName(username):
 			return user
 	return None
 
+def getBlacklistByName(username):
+	username = username.lower()
+
+	for user in db.iterateUsers():
+		if user.isBlacklisted() and user.username is not None and user.username.lower() == username:
+			return user
+		else:
+			continue
+
+	return None
+
 def getUserByOid(oid):
 	for user in db.iterateUsers():
 		if not user.isJoined():
@@ -337,6 +348,19 @@ def promote_user(user, username2, rank):
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
+@requireRank(RANKS.owner)
+def demote_user (user, username2):
+	user2 = getUserByName(username2)
+	if user2 is None:
+		return rp.Reply(rp.types.ERR_NO_USER)
+
+	with db.modifyUser(id=user2.id) as user2:
+		user2.rank = 0 # should change the rank from admin/mod back to 0, user rank
+
+	logging.info("%s was demoted by %s", user2, user)
+	return rp.Reply(rp.types.SUCCESS)
+
+@requireUser
 @requireRank(RANKS.mod)
 def send_mod_message(user, arg):
 	text = arg + " ~<b>mods</b>"
@@ -393,6 +417,26 @@ def warn_user(user, msid, delete=False):
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
+@requireRank(RANKS.admin)
+def xcleanup(user):
+	logging.info("%s invoked cleanup", user)
+	msids = set()
+	with ch.lock:
+		for msid, cm in ch.msgs.items():
+			if cm.user_id is None or cm.warned:
+				continue
+			if 1337 in cm.upvoted: # marker
+				continue
+			user2 = db.getUser(id=cm.user_id)
+			if user2.isBlacklisted():
+				msids.add(msid)
+				cm.upvoted.add(1337)
+	for msid in msids:
+		Sender.delete(msid)
+	text = "<em>%d messages matched, deletion was queued.</em>" % len(msids)
+	return rp.Reply(rp.types.CUSTOM, text=text)
+
+@requireUser
 @requireRank(RANKS.mod)
 def remove(user, msid, reason):
     cm = ch.getMessage(msid)
@@ -428,6 +472,25 @@ def uncooldown_user(user, oid2=None, username2=None):
 		was_until = user2.cooldownUntil
 		user2.cooldownUntil = None
 	logging.info("%s removed cooldown from %s (was until %s)", user, user2, format_datetime(was_until))
+	return rp.Reply(rp.types.SUCCESS)
+
+@requireUser
+@requireRank(RANKS.owner)
+def unblacklist_user(user, username2=None):
+	if username2 is not None:
+		user2 = getBlacklistByName(username2)
+		if user2 is None:
+			return rp.Reply(rp.types.ERR_NO_USER)
+	else:
+		raise ValueError()
+
+	if not user2.isBlacklisted():
+		return rp.Reply(rp.types.ERR_NOT_BLACKLISTED)
+	with db.modifyUser(id=user2.id) as user2:
+		user2.isJoined()
+		user2.removeBlacklist()
+		user2.cooldownUntil = None
+	logging.info("%s removed ban from %s", user, user2)
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser

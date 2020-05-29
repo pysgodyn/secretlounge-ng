@@ -41,7 +41,7 @@ def init(config, _db, _ch):
 	cmds = [
 		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma",
 		"version", "source", "modhelp", "adminhelp", "ownerhelp", "sysophelp", "modsay", "adminsay", "ownersay",
-		"sysopsay", "mod", "admin", "warn", "delete", "remove", "uncooldown", "blacklist",
+		"sysopsay", "mod", "admin", "demote", "warn", "delete", "cleanup", "remove", "uncooldown", "unblacklist", "blacklist",
 		"s", "sign", "tripcode", "settripcode", "t", "tsign"
 	]
 	for c in cmds: # maps /<c> to the function cmd_<c>
@@ -424,7 +424,6 @@ def cmd_version(ev):
 
 cmd_source = cmd_version # alias
 
-
 @takesArgument()
 def cmd_modsay(ev, arg):
 	c_user = UserContainer(ev.from_user)
@@ -461,6 +460,12 @@ def cmd_admin(ev, arg):
 	arg = arg.lstrip("@")
 	send_answer(ev, core.promote_user(c_user, arg, RANKS.admin), True)
 
+@takesArgument()
+def cmd_demote(ev, arg):
+	c_user = UserContainer(ev.from_user)
+	arg = arg.lstrip("@")
+	send_answer(ev, core.demote_user(c_user, arg), True)
+
 def cmd_warn(ev, delete=False):
 	c_user = UserContainer(ev.from_user)
 
@@ -474,6 +479,8 @@ def cmd_warn(ev, delete=False):
 
 cmd_delete = lambda ev: cmd_warn(ev, True)
 
+cmd_cleanup = wrap_core(core.xcleanup)
+
 @takesArgument()
 def cmd_uncooldown(ev, arg):
 	c_user = UserContainer(ev.from_user)
@@ -485,6 +492,12 @@ def cmd_uncooldown(ev, arg):
 		username = arg
 
 	send_answer(ev, core.uncooldown_user(c_user, oid, username), True)
+
+@takesArgument()
+def cmd_unblacklist(ev, arg):
+	c_user = UserContainer(ev.from_user)
+	username = arg
+	send_answer(ev, core.unblacklist_user(c_user, username), True)
 
 @takesArgument(optional=True)
 def cmd_remove(ev, arg):

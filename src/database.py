@@ -103,6 +103,8 @@ class User():
 			self.warnExpiry = datetime.now() + timedelta(hours=WARN_EXPIRE_HOURS)
 		else:
 			self.warnExpiry = None
+	def removeBlacklist(self):
+		self.rank = RANKS.user
 
 # abstract db
 
