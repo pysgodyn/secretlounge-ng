@@ -62,6 +62,8 @@ types = NumericEnum([
 	"ERR_INVALID_TRIP_FORMAT",
 	"ERR_NO_TRIPCODE",
 	"ERR_MEDIA_LIMIT",
+	"ERR_INVALID_PREBAN_FORMAT",
+	"ERR_ALREADY_BANNED",
 
 	"USER_INFO",
 	"USER_INFO_MOD",
@@ -101,12 +103,13 @@ format_strs = {
 	types.CHAT_LEAVE: em("You left the chat!"),
 	types.USER_IN_CHAT: em("You're already in the chat."),
 	types.USER_NOT_IN_CHAT: em("You're not in the chat yet. Use /start to join!"),
-	types.GIVEN_COOLDOWN: lambda deleted, contact, **_:
+	types.GIVEN_COOLDOWN: lambda deleted, contact, reason, **_:
 		em( "You've been handed a cooldown of {duration!d} for this message"+
-			(deleted and " (message also deleted)" or "") )+
-			( em( "\nUnjustified? Contact:") + " {contact}" + " to appeal.") if contact else "",
+			(reason and " for: {reason!x}" or "")+
+			(deleted and " (message also deleted)" or "")+
+			("\nUnjustified? Contact:") + " {contact}" + " to appeal." if contact else ""),
 	types.MESSAGE_REMOVED: lambda reason, **_:
-		em("Your message has been removed" + (reason and " for {reason!x}. " or ". ") + "No cooldown has been given, but refrain from posting the message again."),
+		em("Your message has been removed" + (reason and " for {reason!x}. " or ". ") + "No cooldown has been given."),
 	types.PROMOTED_MOD: em("You've been promoted to moderator, run /modhelp for a list of commands."),
 	types.PROMOTED_ADMIN: em("You've been promoted to admin, run /adminhelp for a list of commands."),
 	types.KARMA_THANK_YOU: em("You just gave this user some sweet karma, awesome!"),
@@ -121,7 +124,7 @@ format_strs = {
 	types.ERR_NO_REPLY: em("You need to reply to a message to use this command."),
 	types.ERR_NOT_IN_CACHE: em("Message not found in cache... (24h passed or bot was restarted)"),
 	types.ERR_NO_USER: em("No user found by that name!"),
-	types.ERR_NO_USER_BY_ID: em("No user found by that id! Note that all ids rotate every 24 hours."),
+	types.ERR_NO_USER_BY_ID: em("No user found by that id! Note that all temporary ids rotate every 24 hours."),
 	types.ERR_COOLDOWN: em("Your cooldown expires at {until!t}"),
 	types.ERR_ALREADY_WARNED: em("A warning has already been issued for this message."),
 	types.ERR_NOT_IN_COOLDOWN: em("This user is not in a cooldown right now."),
@@ -134,10 +137,14 @@ format_strs = {
 	types.ERR_SPAMMY: em("Your message has not been sent. Avoid sending messages too fast, try again later."),
 	types.ERR_SPAMMY_SIGN: em("Your message has not been sent. Avoid using /sign too often, try again later."),
 	types.ERR_INVALID_TRIP_FORMAT:
-		em("Given tripcode is not valid, the format is ")+
-		"<code>name#pass</code>" + em("."),
+		em("Given tripcode is not valid, the format is:")+
+		"\n<code>name#pass</code>" + em("."),
 	types.ERR_NO_TRIPCODE: em("You don't have a tripcode set."),
 	types.ERR_MEDIA_LIMIT: em("You can't send media or forward messages at this time, try again later."),
+	types.ERR_INVALID_PREBAN_FORMAT:
+		em("Given format is not valid, the format is ")+
+		"<code>/preblacklist [USER_ID]:[REASON]</code>" + em("."),
+	types.ERR_ALREADY_BANNED: em("This user is already blacklisted"),
 
 	types.USER_INFO: lambda warnings, cooldown, **_:
 		"<b>id</b>: {id}, <b>username</b>: {username!x}, <b>rank</b>: {rank_i} ({rank})\n"+
@@ -163,16 +170,19 @@ format_strs = {
 		"<i>Moderators can use the following commands</i>:\n"+
 		"  /modhelp - show this text\n"+
 		"  /modsay &lt;message&gt; - send an official moderator message\n"+
+		"      <i>You can also reply to a post with this command</i>\n"+
 		"\n"+
 		"<i>Or reply to a message and use</i>:\n"+
 		"  /info - get info about the user that sent this message\n"+
-		"  /warn - warn the user that sent this message (cooldown)\n"+
-		"  /delete - delete a message and warn the user\n"+
+		"  /warn [reason]- warn the user that sent this message (cooldown)\n"+
+		"  /delete [reason] - delete a message and warn the user\n"+
 		"  /remove [reason] - delete a message without a cooldown",
 	types.HELP_ADMIN:
 		"<i>Admins can use the following commands</i>:\n"+
 		"  /adminhelp - show this text\n"+
 		"  /adminsay &lt;message&gt; - send an official admin message\n"+
+		"      <i>You can also reply to a post with this command</i>\n"+
+		"  /cleanup - remove all posts from a blacklisted user\n"+
 		"\n"+
 		"<i>Or reply to a message and use</i>:\n"+
 		"  /blacklist [reason] - blacklist the user who sent this message",
@@ -180,15 +190,20 @@ format_strs = {
 		"<i>Owners can use the following commands</i>:\n"+
 		"  /ownerhelp - show this text\n"+
 		"  /ownersay &lt;message&gt; - send an official admin message\n"+
+		"      <i>You can also reply to a post with this command</i>\n"+
 		"  /uncooldown &lt;id | username&gt; - remove cooldown from an user\n"+
 		"  /mod &lt;username&gt; - promote an user to the moderator rank\n"+
 		"  /admin &lt;username&gt; - promote an user to the admin rank\n"+
+		"  /demote &lt;username&gt; - demote a ranked user\n"+
+		"  /preblacklist [USER_ID]:[reason] - preemptively ban a user\n"+
+		"      <i>USER_ID must be the numerical Telegram ID</i>\n"+
 		"\n"+
 		"<i>Along with all admin and mod commands</i>",
 	types.HELP_SYSOP:
 		"<i>System Operators can use the following commands</i>:\n"+
 		"  /sysophelp - show this text\n"+
 		"  /sysopsay &lt;message&gt; - send an official sysop message\n"+
+		"      <i>You can also reply to a post with this command</i>\n"+
 		"  /motd &lt;message&gt; - set the welcome message (HTML formatted)\n"+
 		"\n"+
 		"<i>Along with all other commands</i>\n",

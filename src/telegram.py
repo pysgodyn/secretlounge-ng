@@ -39,10 +39,10 @@ def init(config, _db, _ch):
 	types += ["audio", "document", "photo", "sticker", "video", "video_note", "voice"]
 
 	cmds = [
-		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma",
-		"version", "source", "modhelp", "adminhelp", "ownerhelp", "sysophelp", "modsay", "adminsay", "ownersay",
-		"sysopsay", "mod", "admin", "demote", "warn", "delete", "cleanup", "remove", "uncooldown", "unblacklist", "blacklist",
-		"s", "sign", "tripcode", "settripcode", "t", "tsign"
+		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma","version", "source",
+		"modhelp", "adminhelp", "ownerhelp", "sysophelp", "modsay", "adminsay", "ownersay", "sysopsay",
+		"mod", "admin", "demote", "warn", "delete", "cleanup", "remove", "uncooldown","unblacklist", "unban",
+		"blacklist","preblacklist", "preban", "s", "sign", "tripcode", "settripcode", "t", "tsign"
 	]
 	for c in cmds: # maps /<c> to the function cmd_<c>
 		c = c.lower()
@@ -427,26 +427,54 @@ cmd_source = cmd_version # alias
 @takesArgument()
 def cmd_modsay(ev, arg):
 	c_user = UserContainer(ev.from_user)
+	reply_msid = None
+	if ev.reply_to_message is not None:
+		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
+		if reply_msid is None:
+			logging.warning("Message replied to not found in cache [Attempted Ranked Message]")
+			return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
+
 	arg = escape_html(arg)
-	return send_answer(ev, core.send_mod_message(c_user, arg), True)
+	return send_answer(ev, core.send_mod_message(c_user, arg, reply_msid), True)
 
 @takesArgument()
 def cmd_adminsay(ev, arg):
 	c_user = UserContainer(ev.from_user)
+	reply_msid = None
+	if ev.reply_to_message is not None:
+		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
+		if reply_msid is None:
+			logging.warning("Message replied to not found in cache [Attempted Ranked Message]")
+			return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
+
 	arg = escape_html(arg)
-	return send_answer(ev, core.send_admin_message(c_user, arg), True)
+	return send_answer(ev, core.send_admin_message(c_user, arg, reply_msid), True)
 
 @takesArgument()
 def cmd_ownersay(ev, arg):
 	c_user = UserContainer(ev.from_user)
+	reply_msid = None
+	if ev.reply_to_message is not None:
+		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
+		if reply_msid is None:
+			logging.warning("Message replied to not found in cache [Attempted Ranked Message]")
+			return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
+
 	arg = escape_html(arg)
-	return send_answer(ev, core.send_owner_message(c_user, arg), True)
+	return send_answer(ev, core.send_owner_message(c_user, arg, reply_msid), True)
 
 @takesArgument()
 def cmd_sysopsay(ev, arg):
 	c_user = UserContainer(ev.from_user)
+	reply_msid = None
+	if ev.reply_to_message is not None:
+		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
+		if reply_msid is None:
+			logging.warning("Message replied to not found in cache [Attempted Ranked Message]")
+			return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
+
 	arg = escape_html(arg)
-	return send_answer(ev, core.send_sysop_message(c_user, arg), True)
+	return send_answer(ev, core.send_sysop_message(c_user, arg, reply_msid), True)
 
 @takesArgument()
 def cmd_mod(ev, arg):
@@ -466,7 +494,8 @@ def cmd_demote(ev, arg):
 	arg = arg.lstrip("@")
 	send_answer(ev, core.demote_user(c_user, arg), True)
 
-def cmd_warn(ev, delete=False):
+@takesArgument(optional=True)
+def cmd_warn(ev, arg, delete=False):
 	c_user = UserContainer(ev.from_user)
 
 	if ev.reply_to_message is None:
@@ -475,9 +504,21 @@ def cmd_warn(ev, delete=False):
 	reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
 	if reply_msid is None:
 		return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
-	send_answer(ev, core.warn_user(c_user, reply_msid, delete), True)
+	send_answer(ev, core.warn_user(c_user, reply_msid, arg, delete), True)
 
-cmd_delete = lambda ev: cmd_warn(ev, True)
+@takesArgument(optional=True)
+def cmd_delete(ev, arg, delete=True):
+	c_user = UserContainer(ev.from_user)
+
+	if ev.reply_to_message is None:
+		return send_answer(ev, rp.Reply(rp.types.ERR_NO_REPLY), True)
+
+	reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
+	if reply_msid is None:
+		return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
+	send_answer(ev, core.warn_user(c_user, reply_msid, arg, delete), True)
+
+#cmd_delete = lambda ev: cmd_warn(ev, True)
 
 cmd_cleanup = wrap_core(core.xcleanup)
 
@@ -489,6 +530,7 @@ def cmd_uncooldown(ev, arg):
 	if len(arg) < 5:
 		oid = arg # usernames can't be this short -> it's an id
 	else:
+		arg = arg.lstrip("@")
 		username = arg
 
 	send_answer(ev, core.uncooldown_user(c_user, oid, username), True)
@@ -496,8 +538,17 @@ def cmd_uncooldown(ev, arg):
 @takesArgument()
 def cmd_unblacklist(ev, arg):
 	c_user = UserContainer(ev.from_user)
-	username = arg
-	send_answer(ev, core.unblacklist_user(c_user, username), True)
+
+	userID, username = None, None
+	if arg.isnumeric():
+		userID = arg
+	else:
+		arg = arg.lstrip("@")
+		username = arg
+
+	send_answer(ev, core.unblacklist_user(c_user, username, userID), True)
+
+cmd_unban = cmd_unblacklist # alias
 
 @takesArgument(optional=True)
 def cmd_remove(ev, arg):
@@ -522,6 +573,14 @@ def cmd_blacklist(ev, arg):
 	if reply_msid is None:
 		return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
 	return send_answer(ev, core.blacklist_user(c_user, reply_msid, arg), True)
+
+@takesArgument()
+def cmd_preblacklist(ev, arg):
+	c_user = UserContainer (ev.from_user)
+
+	send_answer(ev, core.preemptive_blacklist(c_user, arg), True)
+
+cmd_preban = cmd_preblacklist # alias
 
 def cmd_plusone(ev):
 	c_user = UserContainer(ev.from_user)

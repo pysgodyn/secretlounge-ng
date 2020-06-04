@@ -53,25 +53,14 @@ def updateUserFromEvent(user, c_user):
 	user.realname = c_user.realname
 	user.lastActive = datetime.now()
 
-def getUserByName(username):
+def getUserByName(username, blacklisted=False):
 	username = username.lower()
 	# there *should* only be a single joined user with a given username
 	for user in db.iterateUsers():
-		if not user.isJoined():
+		if not user.isJoined() and blacklisted == False:
 			continue
 		if user.username is not None and user.username.lower() == username:
 			return user
-	return None
-
-def getBlacklistByName(username):
-	username = username.lower()
-
-	for user in db.iterateUsers():
-		if user.isBlacklisted() and user.username is not None and user.username.lower() == username:
-			return user
-		else:
-			continue
-
 	return None
 
 def getUserByOid(oid):
@@ -79,6 +68,15 @@ def getUserByOid(oid):
 		if not user.isJoined():
 			continue
 		if user.getObfuscatedId() == oid:
+			return user
+	return None
+
+# Very redundant, but otherwise using db.getUser() will throw an error and clog up the log
+def getUserByID(userID, blacklisted=False):
+	for user in db.iterateUsers():
+		if not user.isJoined() and blacklisted == False:
+			continue
+		if str(user.id) == userID:
 			return user
 	return None
 
@@ -362,39 +360,39 @@ def demote_user (user, username2):
 
 @requireUser
 @requireRank(RANKS.mod)
-def send_mod_message(user, arg):
-	text = arg + " ~<b>mods</b>"
+def send_mod_message(user, arg, reply_msid=None):
+	text = arg + " ~<b>mod</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
-	_push_system_message(m)
+	_push_system_message(m, reply_to=reply_msid)
 	logging.info("%s sent mod message: %s", user, arg)
 
 @requireUser
 @requireRank(RANKS.admin)
-def send_admin_message(user, arg):
-	text = arg + " ~<b>admins</b>"
+def send_admin_message(user, arg, reply_msid=None):
+	text = arg + " ~<b>admin</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
-	_push_system_message(m)
+	_push_system_message(m, reply_to=reply_msid)
 	logging.info("%s sent admin message: %s", user, arg)
 
 @requireUser
 @requireRank(RANKS.owner)
-def send_owner_message(user, arg):
+def send_owner_message(user, arg, reply_msid=None):
 	text = arg + " ~<b>owner</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
-	_push_system_message(m)
+	_push_system_message(m, reply_to=reply_msid)
 	logging.info("%s sent owner message: %s", user, arg)
 
 @requireUser
 @requireRank(RANKS.sysop)
-def send_sysop_message(user, arg):
+def send_sysop_message(user, arg, reply_msid=None):
 	text = arg + " ~<b>sysop</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
-	_push_system_message(m)
+	_push_system_message(m, reply_to=reply_msid)
 	logging.info("%s sent sysop message: %s", user, arg)
 
 @requireUser
 @requireRank(RANKS.mod)
-def warn_user(user, msid, delete=False):
+def warn_user(user, msid, reason, delete=False):
 	cm = ch.getMessage(msid)
 	if cm is None or cm.user_id is None:
 		return rp.Reply(rp.types.ERR_NOT_IN_CACHE)
@@ -404,7 +402,7 @@ def warn_user(user, msid, delete=False):
 			d = user2.addWarning()
 			user2.karma -= KARMA_WARN_PENALTY
 		_push_system_message(
-			rp.Reply(rp.types.GIVEN_COOLDOWN, duration=d, deleted=delete, contact=blacklist_contact),
+			rp.Reply(rp.types.GIVEN_COOLDOWN, duration=d, deleted=delete, contact=blacklist_contact, reason=reason),
 			who=user2, reply_to=msid)
 		cm.warned = True
 	else:
@@ -413,7 +411,7 @@ def warn_user(user, msid, delete=False):
 			return rp.Reply(rp.types.ERR_ALREADY_WARNED)
 	if delete:
 		Sender.delete(msid)
-	logging.info("%s warned [%s]%s", user, user2.getObfuscatedId(), delete and " (message deleted)" or "")
+	logging.info("%s warned [%s]%s for: %s", user, user2.getObfuscatedId(), delete and " (message deleted)" or "", reason)
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -448,7 +446,7 @@ def remove(user, msid, reason):
         rp.Reply(rp.types.MESSAGE_REMOVED, reason=reason),
         who=user2, reply_to=msid)
     Sender.delete(msid)
-    logging.info("%s had a message removed by %s for: %s", user2, user, reason)
+    logging.info("[%s] had a message removed by %s for: %s", user2.getObfuscatedId(), user, reason)
     return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -476,11 +474,15 @@ def uncooldown_user(user, oid2=None, username2=None):
 
 @requireUser
 @requireRank(RANKS.owner)
-def unblacklist_user(user, username2=None):
+def unblacklist_user(user, username2=None, userID=None):
 	if username2 is not None:
-		user2 = getBlacklistByName(username2)
+		user2 = getUserByName(username2, blacklisted=True)
 		if user2 is None:
 			return rp.Reply(rp.types.ERR_NO_USER)
+	elif userID is not None:
+		user2 = getUserByID(userID, blacklisted=True)
+		if user2 is None:
+			return rp.Reply(rp.types.ERR_NO_USER_BY_ID)
 	else:
 		raise ValueError()
 
@@ -510,6 +512,51 @@ def blacklist_user(user, msid, reason):
 		who=user2, reply_to=msid)
 	Sender.delete(msid)
 	logging.info("%s was blacklisted by %s for: %s", user2, user, reason)
+	return rp.Reply(rp.types.SUCCESS)
+
+@requireUser
+@requireRank(RANKS.owner)
+def preemptive_blacklist(user, arg):
+
+	if not (0 < arg.find(":") < len(arg) - 1):
+		return rp.Reply(rp.types.ERR_INVALID_PREBAN_FORMAT)
+	if "\n" in arg or "@" in arg:
+		return rp.Reply(rp.types.ERR_INVALID_PREBAN_FORMAT)
+
+	pos = arg.find(":")
+	user_id = arg[:pos]
+	reason = arg[pos+1:] + " (preemptively banned)"
+
+	try:
+		user2 = db.getUser(id=int(user_id))
+	except KeyError as e:
+		user2 = None
+
+	if user2 is not None:
+		if user2.isBlacklisted():
+			return rp.Reply(rp.types.ERR_ALREADY_BANNED)
+		elif user2.isJoined(): # Prebans user who is currently joined
+			with db.modifyUser(id=int(user_id)) as user2:
+				if user2.rank >= user.rank: return
+				user2.setBlacklisted(reason)
+				Sender.stop_invoked(user2, True)
+				_push_system_message(
+					rp.Reply(rp.types.ERR_BLACKLISTED, reason=reason, contact=blacklist_contact), who=user2)
+		else: # Prebans user who has already left
+			with db.modifyUser(id=int(user_id)) as user2:
+				if user2.rank >= user.rank: return
+				user2.setBlacklisted(reason)
+
+	# If the user was not in the chat, create a new user
+	else:
+		bannedUser = User()
+		bannedUser.defaults()
+		bannedUser.realname = "PREBANNED"
+		bannedUser.id = int(user_id)
+		bannedUser.setBlacklisted(reason)
+		db.addUser(bannedUser)
+
+	logging.info("%s pre-banned user %d for: %s", user, int(user_id), reason)
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
