@@ -12,10 +12,13 @@ db = None
 ch = None
 spam_scores = None
 sign_last_used = {} # uid -> datetime
+voice_first_used = {}
+voice_count = {}
 
 blacklist_contact = None
 enable_signing = None
 media_limit_period = None
+vc_spamfilter = None
 
 def init(config, _db, _ch):
 	global db, ch, spam_scores, blacklist_contact, enable_signing, media_limit_period
@@ -25,6 +28,7 @@ def init(config, _db, _ch):
 
 	blacklist_contact = config.get("blacklist_contact", "")
 	enable_signing = config["enable_signing"]
+	vc_spamfilter = config["vc_spamfilter"]
 	if "media_limit_period" in config.keys():
 		media_limit_period = timedelta(hours=int(config["media_limit_period"]))
 
@@ -579,12 +583,25 @@ def give_karma(user, msid):
 
 
 @requireUser
-def prepare_user_message(user, msg_score, is_media):
+def prepare_user_message(user, msg_score, is_media, is_voice):
 	if user.isInCooldown():
 		return rp.Reply(rp.types.ERR_COOLDOWN, until=user.cooldownUntil)
 	if is_media and user.rank < RANKS.mod and media_limit_period is not None:
 		if (datetime.now() - user.joined) < media_limit_period:
-			return rp.Reply(rp.types.ERR_MEDIA_LIMIT)
+			limitUntil = media_limit_period - (datetime.now() - user.joined)
+			return rp.Reply(rp.types.ERR_MEDIA_LIMIT, until=(round(limitUntil.seconds / 3600, 1)))
+	if is_voice and vc_spamfilter is not False:
+		first_used = voice_first_used.get(user.id, None)
+		count = voice_count.get(user.id, 0)
+		if first_used is None or (datetime.now() - first_used) > timedelta(seconds=VOICE_INTERVAL_SECONDS):
+			voice_first_used[user.id] = datetime.now()
+			voice_count[user.id] = 0
+			count = 0
+		elif count >= 10 :
+			return rp.Reply(rp.types.ERR_SPAMMY_VOICE)
+		voice_count[user.id] = count + 1
+
+
 	ok = spam_scores.increaseSpamScore(user.id, msg_score)
 	if not ok:
 		return rp.Reply(rp.types.ERR_SPAMMY)

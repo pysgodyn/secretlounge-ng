@@ -611,7 +611,8 @@ def relay(ev):
 	is_media = (ev.forward_from is not None or
 		ev.forward_from_chat is not None or
 		ev.content_type in ("photo", "document", "video", "sticker"))
-	msid = core.prepare_user_message(UserContainer(ev.from_user), calc_spam_score(ev), is_media)
+	is_voice = (ev.content_type == "voice")
+	msid = core.prepare_user_message(UserContainer(ev.from_user), calc_spam_score(ev), is_media, is_voice)
 	if msid is None or isinstance(msid, rp.Reply):
 		return send_answer(ev, msid) # don't relay message, instead reply
 

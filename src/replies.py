@@ -59,6 +59,7 @@ types = NumericEnum([
 	"ERR_UPVOTE_OWN_MESSAGE",
 	"ERR_SPAMMY",
 	"ERR_SPAMMY_SIGN",
+	"ERR_SPAMMY_VOICE",
 	"ERR_INVALID_TRIP_FORMAT",
 	"ERR_NO_TRIPCODE",
 	"ERR_MEDIA_LIMIT",
@@ -136,11 +137,14 @@ format_strs = {
 	types.ERR_UPVOTE_OWN_MESSAGE: em("You can't upvote your own message."),
 	types.ERR_SPAMMY: em("Your message has not been sent. Avoid sending messages too fast, try again later."),
 	types.ERR_SPAMMY_SIGN: em("Your message has not been sent. Avoid using /sign too often, try again later."),
+	types.ERR_SPAMMY_VOICE: em("Your message has not been sent. Avoid sending too many voice messages at a time."),
 	types.ERR_INVALID_TRIP_FORMAT:
 		em("Given tripcode is not valid, the format is:")+
 		"\n<code>name#pass</code>" + em("."),
 	types.ERR_NO_TRIPCODE: em("You don't have a tripcode set."),
-	types.ERR_MEDIA_LIMIT: em("You can't send media or forward messages at this time, try again later."),
+	types.ERR_MEDIA_LIMIT: lambda until, **_:
+		em("You can't send media or forward messages at this time, try again") +
+		( em(" {until} hours from now.")) if until else " later.",
 	types.ERR_INVALID_PREBAN_FORMAT:
 		em("Given format is not valid, the format is ")+
 		"<code>/preblacklist [USER_ID]:[REASON]</code>" + em("."),

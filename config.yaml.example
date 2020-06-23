@@ -10,6 +10,9 @@ allow_contacts: false
 # relay arbitrary documents (GIFs always work)
 allow_documents: true
 
+# include voice messages in the spam filter
+vc_spamfilter: false
+
 # enable signing messages using /sign or /tsign as well as setting a tripcode
 enable_signing: false
 # point of contact shown to blacklisted users (optional)
