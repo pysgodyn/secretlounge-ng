@@ -1,7 +1,6 @@
 import telebot
 import logging
 import time
-import re
 import json
 
 import src.core as core
@@ -169,10 +168,10 @@ def calc_spam_score(ev):
 class QueueItem():
 	__slots__ = ("user_id", "msid", "func")
 	def __init__(self, user, msid, func):
-		self.user_id = None
+		self.user_id = None # who this item is being delivered to
 		if user is not None:
 			self.user_id = user.id
-		self.msid = msid
+		self.msid = msid # message id connected to this item
 		self.func = func
 	def call(self):
 		try:
@@ -271,26 +270,26 @@ def send_to_single(ev, msid, user, reply_msid):
 	if reply_msid is not None:
 		reply_to = ch.lookupMapping(user.id, msid=reply_msid)
 
-	def f(ev=ev, msid=msid, user=user):
+	user_id = user.id
+	def f():
 		while True:
 			try:
-				ev2 = send_to_single_inner(user.id, ev, reply_to=reply_to)
+				ev2 = send_to_single_inner(user_id, ev, reply_to=reply_to)
 			except telebot.apihelper.ApiException as e:
-				retry = check_telegram_exc(e, user)
+				retry = check_telegram_exc(e, user_id)
 				if retry:
 					continue
 				return
 			break
-		ch.saveMapping(user.id, msid, ev2.message_id)
+		ch.saveMapping(user_id, msid, ev2.message_id)
 	put_into_queue(user, msid, f)
 
-def check_telegram_exc(e, user):
+def check_telegram_exc(e, user_id):
 	errmsgs = ["bot was blocked by the user", "user is deactivated",
 		"PEER_ID_INVALID", "bot can't initiate conversation"]
 	if any(msg in e.result.text for msg in errmsgs):
-		if user is not None:
-			logging.warning("Force leaving %s because bot is blocked", user)
-			core.force_user_leave(user)
+		if user_id is not None:
+			core.force_user_leave(user_id)
 		return False
 
 	if "Too Many Requests" in e.result.text:
@@ -339,7 +338,8 @@ class MyReceiver(core.Receiver):
 			id = ch.lookupMapping(user.id, msid=msid)
 			if id is None:
 				continue
-			def f(user_id=user.id, id=id):
+			user_id = user.id
+			def f(user_id=user_id, id=id):
 				while True:
 					try:
 						bot.delete_message(user_id, id)
@@ -356,6 +356,7 @@ class MyReceiver(core.Receiver):
 		message_queue.delete(lambda item, user_id=user.id: item.user_id == user_id)
 		if not delete_out:
 			return
+		# delete all (pending) outgoing messages written by the user in question
 		def f(item):
 			if item.msid is None:
 				return False
@@ -649,8 +650,8 @@ def cmd_sign(ev, arg):
 	if isinstance(msid, rp.Reply):
 		return send_answer(ev, msid, True)
 
-	# save the original message in the mapping, this isn't done inside MyReceiver.reply()
-	# since there's no "original message" at that point
+	# save the original message in the mapping
+	# this isn't done inside MyReceiver.reply() since there's no "original message" at that point
 	ch.saveMapping(c_user.id, msid, ev.message_id)
 
 cmd_s = cmd_sign # alias
