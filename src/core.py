@@ -368,7 +368,7 @@ def demote_user (user, username2):
 @requireUser
 @requireRank(RANKS.mod)
 def send_mod_message(user, arg, reply_msid=None):
-	text = arg + " ~<b>mod</b>"
+	text = arg + " ~<b>mods</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
 	_push_system_message(m, reply_to=reply_msid)
 	logging.info("%s sent mod message: %s", user, arg)
@@ -376,7 +376,7 @@ def send_mod_message(user, arg, reply_msid=None):
 @requireUser
 @requireRank(RANKS.admin)
 def send_admin_message(user, arg, reply_msid=None):
-	text = arg + " ~<b>admin</b>"
+	text = arg + " ~<b>admins</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
 	_push_system_message(m, reply_to=reply_msid)
 	logging.info("%s sent admin message: %s", user, arg)

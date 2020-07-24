@@ -38,7 +38,7 @@ def init(config, _db, _ch):
 	types += ["audio", "document", "photo", "sticker", "video", "video_note", "voice"]
 
 	cmds = [
-		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma","version", "source",
+		"start", "stop", "users", "info", "motd", "rules", "toggledebug", "togglekarma","version", "source",
 		"modhelp", "adminhelp", "ownerhelp", "sysophelp", "modsay", "adminsay", "ownersay", "sysopsay",
 		"mod", "admin", "demote", "warn", "delete", "cleanup", "remove", "uncooldown","unblacklist", "unban",
 		"blacklist","preblacklist", "preban", "s", "sign", "tripcode", "settripcode", "t", "tsign"
@@ -394,6 +394,8 @@ def cmd_motd(ev, arg):
 		send_answer(ev, core.get_motd(c_user), reply_to=True)
 	else:
 		send_answer(ev, core.set_motd(c_user, arg), reply_to=True)
+
+cmd_rules = cmd_motd
 
 cmd_toggledebug = wrap_core(core.toggle_debug)
 cmd_togglekarma = wrap_core(core.toggle_karma)
