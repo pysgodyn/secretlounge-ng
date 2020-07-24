@@ -187,7 +187,9 @@ def get_priority_for(user):
 	return user.getMessagePriority()
 
 def put_into_queue(user, msid, f):
-	message_queue.put(get_priority_for(user), QueueItem(user, msid, f))
+	priority = get_priority_for(user)
+	if priority <= 655362880: # largest value for a user inactive for 2 days
+		message_queue.put(priority, QueueItem(user, msid, f))
 
 def send_thread():
 	while True:
