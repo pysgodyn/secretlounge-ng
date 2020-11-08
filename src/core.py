@@ -17,11 +17,13 @@ voice_count = {}
 
 blacklist_contact = None
 enable_signing = None
+allow_remove_command = None
 media_limit_period = None
 vc_spamfilter = None
+sign_interval = None
 
 def init(config, _db, _ch):
-	global db, ch, spam_scores, blacklist_contact, enable_signing, media_limit_period
+	global db, ch, spam_scores, blacklist_contact, enable_signing, allow_remove_command, media_limit_period, sign_interval
 	db = _db
 	ch = _ch
 	spam_scores = ScoreKeeper()
@@ -29,8 +31,10 @@ def init(config, _db, _ch):
 	blacklist_contact = config.get("blacklist_contact", "")
 	enable_signing = config["enable_signing"]
 	vc_spamfilter = config["vc_spamfilter"]
+	allow_remove_command = config["allow_remove_command"]
 	if "media_limit_period" in config.keys():
 		media_limit_period = timedelta(hours=int(config["media_limit_period"]))
+	sign_interval = timedelta(seconds=int(config.get("sign_limit_interval", 600)))
 
 	# initialize db if empty
 	if db.getSystemConfig() is None:
@@ -95,15 +99,16 @@ def requireUser(func):
 			except KeyError as e:
 				return rp.Reply(rp.types.USER_NOT_IN_CHAT)
 
+		# keep db entry up to date
+		with db.modifyUser(id=user.id) as user:
+			updateUserFromEvent(user, c_user)
+
 		# check for blacklist or absence
 		if user.isBlacklisted():
 			return rp.Reply(rp.types.ERR_BLACKLISTED, reason=user.blacklistReason, contact=blacklist_contact)
 		elif not user.isJoined():
 			return rp.Reply(rp.types.USER_NOT_IN_CHAT)
 
-		# keep db entry up to date
-		with db.modifyUser(id=user.id) as user:
-			updateUserFromEvent(user, c_user)
 		# call original function
 		return func(user, *args, **kwargs)
 	return wrapper
@@ -134,7 +139,7 @@ class ScoreKeeper():
 				return False
 			elif s + n > SPAM_LIMIT:
 				self.scores[uid] = SPAM_LIMIT_HIT
-				return False
+				return s + n <= SPAM_LIMIT_HIT
 			self.scores[uid] = s + n
 			return True
 	def scheduledTask(self):
@@ -193,12 +198,16 @@ def user_join(c_user):
 		user = None
 
 	if user is not None:
+		# check if user can't rejoin
+		err = None
 		if user.isBlacklisted():
-			return rp.Reply(rp.types.ERR_BLACKLISTED, reason=user.blacklistReason, contact=blacklist_contact)
+			err = rp.Reply(rp.types.ERR_BLACKLISTED, reason=user.blacklistReason, contact=blacklist_contact)
 		elif user.isJoined():
+			err = rp.Reply(rp.types.USER_IN_CHAT)
+		if err is not None:
 			with db.modifyUser(id=user.id) as user:
 				updateUserFromEvent(user, c_user)
-			return rp.Reply(rp.types.USER_IN_CHAT)
+			return err
 		# user rejoins
 		with db.modifyUser(id=user.id) as user:
 			updateUserFromEvent(user, c_user)
@@ -444,6 +453,9 @@ def xcleanup(user):
 @requireUser
 @requireRank(RANKS.mod)
 def remove(user, msid, reason):
+    if not allow_remove_command:
+	    return rp.Reply(rp.types.ERR_COMMAND_DISABLED)
+
     cm = ch.getMessage(msid)
     if cm is None or cm.user_id is None:
         return rp.Reply(rp.types.ERR_NOT_IN_CACHE)
@@ -621,9 +633,9 @@ def send_signed_user_message(user, msg_score, text, reply_msid=None, tripcode=Fa
 	ok = spam_scores.increaseSpamScore(user.id, msg_score)
 	if not ok:
 		return rp.Reply(rp.types.ERR_SPAMMY)
-	if not tripcode:
+	if not tripcode and sign_interval.total_seconds() > 1:
 		last_used = sign_last_used.get(user.id, None)
-		if last_used and (datetime.now() - last_used) < timedelta(seconds=SIGN_INTERVAL_SECONDS):
+		if last_used and (datetime.now() - last_used) < sign_interval:
 			return rp.Reply(rp.types.ERR_SPAMMY_SIGN)
 		sign_last_used[user.id] = datetime.now()
 
