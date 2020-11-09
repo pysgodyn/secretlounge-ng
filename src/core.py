@@ -21,9 +21,10 @@ allow_remove_command = None
 media_limit_period = None
 vc_spamfilter = None
 sign_interval = None
+afk_timeout = None
 
 def init(config, _db, _ch):
-	global db, ch, spam_scores, blacklist_contact, enable_signing, allow_remove_command, media_limit_period, sign_interval
+	global db, ch, spam_scores, blacklist_contact, enable_signing, allow_remove_command, media_limit_period, sign_interval, afk_timeout
 	db = _db
 	ch = _ch
 	spam_scores = ScoreKeeper()
@@ -34,6 +35,9 @@ def init(config, _db, _ch):
 	allow_remove_command = config["allow_remove_command"]
 	if "media_limit_period" in config.keys():
 		media_limit_period = timedelta(hours=int(config["media_limit_period"]))
+	if "afk_timeout" in config.keys():
+		afk_timeout = (int(config["afk_timeout"])) * 60
+		afk_timeout = max(RANKS.values()) << 16 | afk_timeout
 	sign_interval = timedelta(seconds=int(config.get("sign_limit_interval", 600)))
 
 	# initialize db if empty
@@ -55,11 +59,22 @@ def register_tasks(sched):
 				with db.modifyUser(id=user.id) as user:
 					user.removeWarning()
 	sched.register(task, minutes=15)
+	def setInactiveUser():
+		for user in db.iterateUsers():
+			if not user.isJoined():
+				continue
+			if user.getMessagePriority() >= afk_timeout and not user.inactive:
+				_push_system_message(rp.Reply(rp.types.AFK_TIMEOUT), who = user)
+				with db.modifyUser(id=user.id) as user:
+					user.setInactive()
+	if afk_timeout is not None:
+		sched.register(setInactiveUser, hours=12)
 
 def updateUserFromEvent(user, c_user):
 	user.username = c_user.username
 	user.realname = c_user.realname
 	user.lastActive = datetime.now()
+	user.inactive = False
 
 def getUserByName(username, blacklisted=False):
 	username = username.lower()

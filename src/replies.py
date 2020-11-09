@@ -44,6 +44,7 @@ types = NumericEnum([
 	"KARMA_NOTIFICATION",
 	"TRIPCODE_INFO",
 	"TRIPCODE_SET",
+    "AFK_TIMEOUT",
 
 	"ERR_COMMAND_DISABLED",
 	"ERR_NO_REPLY",
@@ -120,6 +121,7 @@ format_strs = {
 	types.TRIPCODE_INFO: lambda tripcode, **_:
 		"<b>tripcode</b>: " + ("<code>{tripcode!x}</code>" if tripcode is not None else "unset"),
 	types.TRIPCODE_SET: em("Tripcode set. It will appear as: ") + "<b>{tripname!x}</b> <code>{tripcode!x}</code>",
+    types.AFK_TIMEOUT: em("You've been AFK for too long. Send a post to start receiving messages again!"),
 
 	types.ERR_COMMAND_DISABLED: em("This command has been disabled."),
 	types.ERR_NO_REPLY: em("You need to reply to a message to use this command."),
