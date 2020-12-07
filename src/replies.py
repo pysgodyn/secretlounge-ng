@@ -104,7 +104,7 @@ format_strs = {
 		em( "You've been handed a cooldown of {duration!d} for this message"+
 			(reason and " for: {reason!x}" or "")+
 			(deleted and " (message also deleted)" or "")+
-			("\nUnjustified? Contact:") + " {contact}" + " to appeal." if contact else ""),
+			(("\nUnjustified? Contact:") + " {contact}" + " to appeal." if contact else "")),
 	types.MESSAGE_REMOVED: lambda reason, **_:
 		em("Your message has been removed" + (reason and " for {reason!x}. " or ". ") + "No cooldown has been given."),
 	types.PROMOTED_MOD: em("You've been promoted to moderator, run /modhelp for a list of commands."),
