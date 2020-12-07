@@ -19,7 +19,7 @@ class SystemConfig():
 USER_PROPS = (
 	"id", "username", "realname", "rank", "joined", "left", "lastActive",
 	"cooldownUntil", "blacklistReason", "warnings", "warnExpiry", "karma",
-	"hideKarma", "debugEnabled", "tripcode"
+	"hideKarma", "debugEnabled", "tripcode", "inactive"
 )
 
 class User():
@@ -40,6 +40,7 @@ class User():
 		self.hideKarma = None # bool
 		self.debugEnabled = None # bool
 		self.tripcode = None # str?
+		self.inactive = None # bool
 	def __eq__(self, other):
 		if isinstance(other, User):
 			return self.id == other.id
@@ -54,12 +55,15 @@ class User():
 		self.karma = 0
 		self.hideKarma = False
 		self.debugEnabled = False
+		self.inactive = False
 	def isJoined(self):
 		return self.left is None
 	def isInCooldown(self):
 		return self.cooldownUntil is not None and self.cooldownUntil >= datetime.now()
 	def isBlacklisted(self):
 		return self.rank < 0
+	def isInactive(self):
+		return self.inactive is True
 	def getObfuscatedId(self):
 		salt = date.today().toordinal()
 		if salt & 0xff == 0: salt >>= 8 # zero bits are bad for hashing
@@ -80,6 +84,8 @@ class User():
 		# lower value means higher priority
 		# in this case: prioritize by higher rank, then by lower inactivity time
 		return c1 << 16 | c2
+	def setInactive(self):
+		self.inactive = True
 	def setLeft(self, v=True):
 		self.left = datetime.now() if v else None
 	def setBlacklisted(self, reason):
@@ -187,7 +193,8 @@ class JSONDatabase(Database):
 	def _userToDict(user):
 		props = ["id", "username", "realname", "rank", "joined", "left",
 			"lastActive", "cooldownUntil", "blacklistReason", "warnings",
-			"warnExpiry", "karma", "hideKarma", "debugEnabled", "tripcode"]
+			"warnExpiry", "karma", "hideKarma", "debugEnabled", "tripcode",
+			"inactive"]
 		d = {}
 		for prop in props:
 			value = getattr(user, prop)
@@ -321,12 +328,15 @@ CREATE TABLE IF NOT EXISTS `users` (
 	`hideKarma` TINYINT NOT NULL,
 	`debugEnabled` TINYINT NOT NULL,
 	`tripcode` TEXT,
+	`inactive` TINYINT NOT NULL,
 	PRIMARY KEY (`id`)
 );
 			""".strip())
 			# migration
 			if not row_exists("users", "tripcode"):
 				self.db.execute("ALTER TABLE `users` ADD `tripcode` TEXT")
+			if not row_exists("users", "inactive"):
+				self.db.execute("ALTER TABLE `users` ADD `inactive` TINYINT")
 	def getUser(self, id=None):
 		if id is None:
 			raise ValueError()

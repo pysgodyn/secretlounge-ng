@@ -29,8 +29,6 @@ types = NumericEnum([
 	"CUSTOM",
 	"SUCCESS",
 	"BOOLEAN_CONFIG",
-	"SIGNED_MSG",
-	"TSIGNED_MSG",
 
 	"CHAT_JOIN",
 	"CHAT_LEAVE",
@@ -44,6 +42,7 @@ types = NumericEnum([
 	"KARMA_NOTIFICATION",
 	"TRIPCODE_INFO",
 	"TRIPCODE_SET",
+    "AFK_TIMEOUT",
 
 	"ERR_COMMAND_DISABLED",
 	"ERR_NO_REPLY",
@@ -59,6 +58,7 @@ types = NumericEnum([
 	"ERR_UPVOTE_OWN_MESSAGE",
 	"ERR_SPAMMY",
 	"ERR_SPAMMY_SIGN",
+	"ERR_SPAMMY_VOICE",
 	"ERR_INVALID_TRIP_FORMAT",
 	"ERR_NO_TRIPCODE",
 	"ERR_MEDIA_LIMIT",
@@ -95,9 +95,6 @@ format_strs = {
 	types.SUCCESS: "☑",
 	types.BOOLEAN_CONFIG: lambda enabled, **_:
 		"<b>{description!x}</b>: " + (enabled and "enabled" or "disabled"),
-	types.SIGNED_MSG: "{text!x} <a href=\"tg://user?id={user_id}\">~~{user_text!x}</a>",
-	types.TSIGNED_MSG: "<b>{tripname!x}</b> <code>{tripcode!x}</code>:\n"+
-		"{text!x}",
 
 	types.CHAT_JOIN: em("You joined the chat!"),
 	types.CHAT_LEAVE: em("You left the chat!"),
@@ -117,8 +114,9 @@ format_strs = {
 		em( "You've just been given sweet karma! (check /info to see your karma"+
 			" or /toggleKarma to turn these notifications off)" ),
 	types.TRIPCODE_INFO: lambda tripcode, **_:
-		"<b>tripcode</b>: " + ("<code>{tripcode!x}</code>" if tripcode is not None else "unset" ),
+		"<b>tripcode</b>: " + ("<code>{tripcode!x}</code>" if tripcode is not None else "unset"),
 	types.TRIPCODE_SET: em("Tripcode set. It will appear as: ") + "<b>{tripname!x}</b> <code>{tripcode!x}</code>",
+    types.AFK_TIMEOUT: em("You've been AFK for too long. Send a post to start receiving messages again!"),
 
 	types.ERR_COMMAND_DISABLED: em("This command has been disabled."),
 	types.ERR_NO_REPLY: em("You need to reply to a message to use this command."),
@@ -131,16 +129,19 @@ format_strs = {
 	types.ERR_NOT_BLACKLISTED: em("This user is not banned right now."),
 	types.ERR_BLACKLISTED: lambda reason, contact, **_:
 		em( "You've been blacklisted" + (reason and " for {reason!x}" or "") )+
-		( em("\nContact:") + " {contact}" + " to appeal." ) if contact else "",
+		( em("\nContact:") + " {contact}" + " to appeal." if contact else ""),
 	types.ERR_ALREADY_UPVOTED: em("You have already upvoted this message."),
 	types.ERR_UPVOTE_OWN_MESSAGE: em("You can't upvote your own message."),
 	types.ERR_SPAMMY: em("Your message has not been sent. Avoid sending messages too fast, try again later."),
 	types.ERR_SPAMMY_SIGN: em("Your message has not been sent. Avoid using /sign too often, try again later."),
+	types.ERR_SPAMMY_VOICE: em("Your message has not been sent. Avoid sending too many voice messages at a time."),
 	types.ERR_INVALID_TRIP_FORMAT:
 		em("Given tripcode is not valid, the format is:")+
 		"\n<code>name#pass</code>" + em("."),
 	types.ERR_NO_TRIPCODE: em("You don't have a tripcode set."),
-	types.ERR_MEDIA_LIMIT: em("You can't send media or forward messages at this time, try again later."),
+	types.ERR_MEDIA_LIMIT: lambda until, **_:
+		em("You can't send media or forward messages at this time, try again") +
+		( em(" {until} hours from now.")) if until else " later.",
 	types.ERR_INVALID_PREBAN_FORMAT:
 		em("Given format is not valid, the format is ")+
 		"<code>/preblacklist [USER_ID]:[REASON]</code>" + em("."),
