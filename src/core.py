@@ -36,8 +36,10 @@ def init(config, _db, _ch):
 	if "media_limit_period" in config.keys():
 		media_limit_period = timedelta(hours=int(config["media_limit_period"]))
 	if "afk_timeout" in config.keys():
-		afk_timeout = (int(config["afk_timeout"])) * 60
-		afk_timeout = max(RANKS.values()) << 16 | afk_timeout
+		if config["afk_timeout"] != 0:
+			afk_timeout = timedelta(days=int(config["afk_timeout"]))
+		else:
+			logging.warning("AFK timeout cannot equal 0 days")
 	sign_interval = timedelta(seconds=int(config.get("sign_limit_interval", 600)))
 
 	# initialize db if empty
@@ -63,7 +65,9 @@ def register_tasks(sched):
 		for user in db.iterateUsers():
 			if not user.isJoined():
 				continue
-			if user.getMessagePriority() >= afk_timeout and not user.inactive:
+			if user.rank != 0:
+				continue
+			if (datetime.now() - user.lastActive) > afk_timeout and not user.inactive:
 				_push_system_message(rp.Reply(rp.types.AFK_TIMEOUT), who = user)
 				with db.modifyUser(id=user.id) as user:
 					user.setInactive()

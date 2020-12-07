@@ -16,9 +16,8 @@ vc_spamfilter: false
 # allow mods to remove message without issuing a cooldown
 allow_remove_command: false
 
-# limit how long (hours) a joined user can be inactive
-# Can be between 24 to 17476 hours. Default is 30 days
-#afk_timeout: 720
+# limit how long (days) a joined user can be inactive
+#afk_timeout: 30
 
 # enable signing messages using /sign or /tsign as well as setting a tripcode
 enable_signing: false
