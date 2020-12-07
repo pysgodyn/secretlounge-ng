@@ -1,25 +1,39 @@
 import telebot
 import logging
 import time
-import re
 import json
+import re
 
 import src.core as core
 import src.replies as rp
-from src.util import MutablePriorityQueue
+from src.util import MutablePriorityQueue, genTripcode
 from src.globals import *
 
+# module constants
+MEDIA_FILTER_TYPES = ("photo", "animation", "document", "video", "sticker")
+CAPTIONABLE_TYPES = ("photo", "audio", "animation", "document", "video", "voice")
+HIDE_FORWARD_FROM = set([
+	"anonymize_bot", "AnonFaceBot", "AnonymousForwarderBot", "anonomiserBot",
+	"anonymous_forwarder_nashenasbot", "anonymous_forward_bot", "mirroring_bot",
+	"anonymizbot", "ForwardsCoverBot", "anonymousmcjnbot", "MirroringBot",
+	"anonymousforwarder_bot", "anonymousForwardBot", "anonymous_forwarder_bot",
+	"anonymousforwardsbot", "HiddenlyBot", "ForwardCoveredBot",
+])
+VENUE_PROPS = ("title", "address", "foursquare_id", "foursquare_type", "google_place_id", "google_place_type")
+
+# module variables
 bot = None
 db = None
 ch = None
 message_queue = None
 registered_commands = {}
 
-# settings regarding message relaying
+# settings
 allow_documents = None
+linked_network: dict = None
 
 def init(config, _db, _ch):
-	global bot, db, ch, message_queue, allow_documents
+	global bot, db, ch, message_queue, allow_documents, linked_network
 	if config["bot_token"] == "":
 		logging.error("No telegram token specified.")
 		exit(1)
@@ -32,24 +46,30 @@ def init(config, _db, _ch):
 
 	allow_contacts = config["allow_contacts"]
 	allow_documents = config["allow_documents"]
+	linked_network = config.get("linked_network")
+	if linked_network is not None and not isinstance(linked_network, dict):
+		logging.error("Wrong type for 'linked_network'")
+		exit(1)
 
 	types = ["text", "location", "venue"]
 	if allow_contacts:
 		types += ["contact"]
-	types += ["audio", "document", "photo", "sticker", "video", "video_note", "voice"]
+	if allow_documents:
+		types += ["document"]
+	types += ["animation", "audio", "photo", "sticker", "video", "video_note", "voice"]
 
 	cmds = [
 		"start", "stop", "users", "info", "motd", "toggledebug", "togglekarma",
 		"version", "source", "modhelp", "adminhelp", "modsay", "adminsay", "mod",
 		"admin", "warn", "delete", "remove", "uncooldown", "blacklist", "s", "sign",
-		"tripcode", "settripcode", "t", "tsign"
+		"tripcode", "t", "tsign"
 	]
 	for c in cmds: # maps /<c> to the function cmd_<c>
 		c = c.lower()
 		registered_commands[c] = globals()["cmd_" + c]
-	handler(relay, content_types=types)
+	set_handler(relay, content_types=types)
 
-def handler(func, *args, **kwargs):
+def set_handler(func, *args, **kwargs):
 	def wrapper(*args, **kwargs):
 		try:
 			func(*args, **kwargs)
@@ -84,6 +104,7 @@ def register_tasks(sched):
 			logging.warning("Failed to deliver %d messages before they expired from cache.", n)
 	sched.register(task, hours=6) # (1/4) * cache duration
 
+# Wraps a telegram user in a consistent class (used by core.py)
 class UserContainer():
 	def __init__(self, u):
 		self.id = u.id
@@ -92,12 +113,16 @@ class UserContainer():
 		if u.last_name is not None:
 			self.realname += " " + u.last_name
 
+def split_command(text):
+	if " " not in text:
+		return text[1:].lower(), ""
+	pos = text.find(" ")
+	return text[1:pos].lower(), text[pos+1:].strip()
+
 def takesArgument(optional=False):
 	def f(func):
 		def wrap(ev):
-			arg = ""
-			if " " in ev.text:
-				arg = ev.text[ev.text.find(" ")+1:].strip()
+			_, arg = split_command(ev.text)
 			if arg == "" and not optional:
 				return
 			return func(ev, arg)
@@ -117,6 +142,7 @@ def send_answer(ev, m, reply_to=False):
 		for m2 in m:
 			send_answer(ev, m2, reply_to)
 		return
+
 	reply_to = ev.message_id if reply_to else None
 	def f(ev=ev, m=m):
 		while True:
@@ -144,6 +170,7 @@ def allow_message_text(text):
 		return False
 	return True
 
+# determine spam score for message `ev`
 def calc_spam_score(ev):
 	if not allow_message_text(ev.text) or not allow_message_text(ev.caption):
 		return 999
@@ -164,15 +191,115 @@ def calc_spam_score(ev):
 
 ###
 
+# Formatting for user messages, which are largely passed through as-is
+
+class FormattedMessage():
+	html: bool
+	content: str
+	def __init__(self, html, content):
+		self.html = html
+		self.content = content
+
+class FormattedMessageBuilder():
+	text_content: str
+	# initialize builder with first argument that isn't None
+	def __init__(self, *args):
+		self.text_content = next(filter(lambda x: x is not None, args))
+		self.inserts = {}
+	def get_text(self):
+		return self.text_content
+	# insert `content` at `pos`, `html` indicates HTML or plaintext
+	# if `pre` is set content will be inserted *before* existing insertions
+	def insert(self, pos, content, html=False, pre=False):
+		i = self.inserts.get(pos)
+		if i is not None:
+			cat = lambda a, b: (b + a) if pre else (a + b)
+			# only turn insert into HTML if strictly necessary
+			if i[0] == html:
+				i = ( i[0], cat(i[1], content) )
+			elif not i[0]:
+				i = ( True, cat(escape_html(i[1]), content) )
+			else: # not html
+				i = ( True, cat(i[1], escape_html(content)) )
+		else:
+			i = (html, content)
+		self.inserts[pos] = i
+	def prepend(self, content, html=False):
+		self.insert(0, content, html, True)
+	def append(self, content, html=False):
+		self.insert(len(self.text_content), content, html)
+	def enclose(self, pos1, pos2, content_begin, content_end, html=False):
+		self.insert(pos1, content_begin, html)
+		self.insert(pos2, content_end, html, True)
+	def build(self) -> FormattedMessage:
+		if len(self.inserts) == 0:
+			return
+		html = any(i[0] for i in self.inserts.values())
+		norm = lambda i: i[1] if i[0] == html else escape_html(i[1])
+		s = ""
+		for idx, c in enumerate(self.text_content):
+			i = self.inserts.pop(idx, None)
+			if i is not None:
+				s += norm(i)
+			s += escape_html(c) if html else c
+		i = self.inserts.pop(len(self.text_content), None)
+		if i is not None:
+			s += norm(i)
+		assert len(self.inserts) == 0
+		return FormattedMessage(html, s)
+
+# Append inline URLs from the message `ev` to `fmt` so they are preserved even
+# if the original formatting is stripped
+def formatter_replace_links(ev, fmt: FormattedMessageBuilder):
+	entities = ev.caption_entities or ev.entities
+	if entities is None:
+		return
+	for ent in entities:
+		if ent.type == "text_link":
+			if ent.url.startswith("tg://"):
+				continue # doubt anyone needs these
+			if "://t.me/" in ent.url and "?start=" in ent.url:
+				continue # deep links look ugly and are likely not important
+			fmt.append("\n(%s)" % ent.url)
+
+# Add inline links for >>>/name/ syntax depending on configuration
+def formatter_network_links(fmt: FormattedMessageBuilder):
+	if not linked_network:
+		return
+	for m in re.finditer(r'>>>/([a-zA-Z0-9]+)/', fmt.get_text()):
+		link = linked_network.get(m.group(1).lower())
+		if link:
+			# we use a tg:// URL here because it avoids web page preview
+			fmt.enclose(m.start(), m.end(),
+				"<a href=\"tg://resolve?domain=%s\">" % link, "</a>", True)
+
+# Add signed message formatting for User `user` to `fmt`
+def formatter_signed_message(user: core.User, fmt: FormattedMessageBuilder):
+	fmt.append(" <a href=\"tg://user?id=%d\">" % user.id, True)
+	fmt.append("~~" + user.getFormattedName())
+	fmt.append("</a>", True)
+
+# Add tripcode message formatting for User `user` to `fmt`
+def formatter_tripcoded_message(user: core.User, fmt: FormattedMessageBuilder):
+	tripname, tripcode = genTripcode(user.tripcode)
+	# due to how prepend() works the string is built right-to-left
+	fmt.prepend("</code>:\n", True)
+	fmt.prepend(tripcode)
+	fmt.prepend("</b> <code>", True)
+	fmt.prepend(tripname)
+	fmt.prepend("<b>", True)
+
+###
+
 # Message sending (queue-related)
 
 class QueueItem():
 	__slots__ = ("user_id", "msid", "func")
 	def __init__(self, user, msid, func):
-		self.user_id = None
+		self.user_id = None # who this item is being delivered to
 		if user is not None:
 			self.user_id = user.id
-		self.msid = msid
+		self.msid = msid # message id connected to this item
 		self.func = func
 	def call(self):
 		try:
@@ -199,46 +326,68 @@ def send_thread():
 
 # Message sending (functions)
 
-def resend_message(chat_id, ev, reply_to=None):
-	if (ev.forward_from is not None or ev.forward_from_chat is not None
-		or ev.json.get("forward_sender_name") is not None):
+def is_forward(ev):
+	return (ev.forward_from is not None or ev.forward_from_chat is not None
+		or ev.json.get("forward_sender_name") is not None)
+
+def should_hide_forward(ev):
+	# Hide forwards from anonymizing bots that have recently become popular.
+	# The main reason is that the bot API heavily penalizes forwarding and the
+	# 'Forwarded from Anonymize Bot' provides no additional/useful information.
+	if ev.forward_from is not None:
+		return ev.forward_from.username in HIDE_FORWARD_FROM
+	return False
+
+def resend_message(chat_id, ev, reply_to=None, force_caption: FormattedMessage=None):
+	if should_hide_forward(ev):
+		pass
+	elif is_forward(ev):
 		# forward message instead of re-sending the contents
 		return bot.forward_message(chat_id, ev.chat.id, ev.message_id)
 
 	kwargs = {}
 	if reply_to is not None:
 		kwargs["reply_to_message_id"] = reply_to
+	if ev.content_type in CAPTIONABLE_TYPES:
+		if force_caption is not None:
+			kwargs["caption"] = force_caption.content
+			if force_caption.html:
+				kwargs["parse_mode"] = "HTML"
+		else:
+			kwargs["caption"] = ev.caption
 
 	# re-send message based on content type
 	if ev.content_type == "text":
-		pass
+		return bot.send_message(chat_id, ev.text, **kwargs)
 	elif ev.content_type == "photo":
 		photo = sorted(ev.photo, key=lambda e: e.width*e.height, reverse=True)[0]
-		return bot.send_photo(chat_id, photo.file_id, caption=ev.caption, **kwargs)
+		return bot.send_photo(chat_id, photo.file_id, **kwargs)
 	elif ev.content_type == "audio":
-		for prop in ["performer", "title"]:
+		for prop in ("performer", "title"):
 			kwargs[prop] = getattr(ev.audio, prop)
-		return bot.send_audio(chat_id, ev.audio.file_id, caption=ev.caption, **kwargs)
+		return bot.send_audio(chat_id, ev.audio.file_id, **kwargs)
+	elif ev.content_type == "animation":
+		return bot.send_animation(chat_id, ev.animation.file_id, **kwargs)
 	elif ev.content_type == "document":
-		return bot.send_document(chat_id, ev.document.file_id, caption=ev.caption, **kwargs)
+		return bot.send_document(chat_id, ev.document.file_id, **kwargs)
 	elif ev.content_type == "video":
-		return bot.send_video(chat_id, ev.video.file_id, caption=ev.caption, **kwargs)
+		return bot.send_video(chat_id, ev.video.file_id, **kwargs)
 	elif ev.content_type == "voice":
-		return bot.send_voice(chat_id, ev.voice.file_id, caption=ev.caption, **kwargs)
+		return bot.send_voice(chat_id, ev.voice.file_id, **kwargs)
 	elif ev.content_type == "video_note":
 		return bot.send_video_note(chat_id, ev.video_note.file_id, **kwargs)
 	elif ev.content_type == "location":
-		for prop in ["latitude", "longitude"]:
-			kwargs[prop] = getattr(ev.location, prop)
+		kwargs["latitude"] = ev.location.latitude
+		kwargs["longitude"] = ev.location.longitude
 		return bot.send_location(chat_id, **kwargs)
 	elif ev.content_type == "venue":
 		kwargs["latitude"] = ev.venue.location.latitude
 		kwargs["longitude"] = ev.venue.location.longitude
-		for prop in ["title", "address", "foursquare_id"]:
+		for prop in VENUE_PROPS:
 			kwargs[prop] = getattr(ev.venue, prop)
 		return bot.send_venue(chat_id, **kwargs)
 	elif ev.content_type == "contact":
-		for prop in ["phone_number", "first_name", "last_name"]:
+		for prop in ("phone_number", "first_name", "last_name"):
 			kwargs[prop] = getattr(ev.contact, prop)
 		return bot.send_contact(chat_id, **kwargs)
 	elif ev.content_type == "sticker":
@@ -246,15 +395,9 @@ def resend_message(chat_id, ev, reply_to=None):
 	else:
 		raise NotImplementedError("content_type = %s" % ev.content_type)
 
-	# for text
-	s = ev.text
-	if ev.entities is not None:
-		for ent in ev.entities:
-			if ent.type == "text_link":
-				s += "\n(%s)" % ent.url
-	return bot.send_message(chat_id, s, **kwargs)
-
-def send_to_single_inner(chat_id, ev, reply_to=None):
+# send a message `ev` (multiple types possible) to Telegram ID `chat_id`
+# returns the sent Telegram message
+def send_to_single_inner(chat_id, ev, reply_to=None, force_caption=None):
 	if isinstance(ev, rp.Reply):
 		kwargs2 = {}
 		if reply_to is not None:
@@ -262,35 +405,48 @@ def send_to_single_inner(chat_id, ev, reply_to=None):
 		if ev.type == rp.types.CUSTOM:
 			kwargs2["disable_web_page_preview"] = True
 		return bot.send_message(chat_id, rp.formatForTelegram(ev), parse_mode="HTML", **kwargs2)
-	else:
-		return resend_message(chat_id, ev, reply_to=reply_to)
+	elif isinstance(ev, FormattedMessage):
+		kwargs2 = {}
+		if reply_to is not None:
+			kwargs2["reply_to_message_id"] = reply_to
+		if ev.html:
+			kwargs2["parse_mode"] = "HTML"
+		return bot.send_message(chat_id, ev.content, **kwargs2)
 
-def send_to_single(ev, msid, user, reply_msid):
+	return resend_message(chat_id, ev, reply_to=reply_to, force_caption=force_caption)
+
+# queue sending of a single message `ev` (multiple types possible) to User `user`
+# this includes saving of the sent message id to the cache mapping.
+# `reply_msid` can be a msid of the message that will be replied to
+# `force_caption` can be a FormattedMessage to set the caption for resent media
+def send_to_single(ev, msid, user, *, reply_msid=None, force_caption=None):
 	# set reply_to_message_id if applicable
 	reply_to = None
 	if reply_msid is not None:
 		reply_to = ch.lookupMapping(user.id, msid=reply_msid)
 
-	def f(ev=ev, msid=msid, user=user):
+	user_id = user.id
+	def f():
 		while True:
 			try:
-				ev2 = send_to_single_inner(user.id, ev, reply_to=reply_to)
+				ev2 = send_to_single_inner(user_id, ev, reply_to, force_caption)
 			except telebot.apihelper.ApiException as e:
-				retry = check_telegram_exc(e, user)
+				retry = check_telegram_exc(e, user_id)
 				if retry:
 					continue
 				return
 			break
-		ch.saveMapping(user.id, msid, ev2.message_id)
+		ch.saveMapping(user_id, msid, ev2.message_id)
 	put_into_queue(user, msid, f)
 
-def check_telegram_exc(e, user):
+# look at given Exception `e`, force-leave user if bot was blocked
+# returns True if message sending should be retried
+def check_telegram_exc(e, user_id):
 	errmsgs = ["bot was blocked by the user", "user is deactivated",
 		"PEER_ID_INVALID", "bot can't initiate conversation"]
 	if any(msg in e.result.text for msg in errmsgs):
-		if user is not None:
-			logging.warning("Force leaving %s because bot is blocked", user)
-			core.force_user_leave(user)
+		if user_id is not None:
+			core.force_user_leave(user_id)
 		return False
 
 	if "Too Many Requests" in e.result.text:
@@ -314,14 +470,14 @@ class MyReceiver(core.Receiver):
 	@staticmethod
 	def reply(m, msid, who, except_who, reply_msid):
 		if who is not None:
-			return send_to_single(m, msid, who, reply_msid)
+			return send_to_single(m, msid, who, reply_msid=reply_msid)
 
 		for user in db.iterateUsers():
 			if not user.isJoined():
 				continue
 			if user == except_who and not user.debugEnabled:
 				continue
-			send_to_single(m, msid, user, reply_msid)
+			send_to_single(m, msid, user, reply_msid=reply_msid)
 	@staticmethod
 	def delete(msid):
 		tmp = ch.getMessage(msid)
@@ -339,7 +495,8 @@ class MyReceiver(core.Receiver):
 			id = ch.lookupMapping(user.id, msid=msid)
 			if id is None:
 				continue
-			def f(user_id=user.id, id=id):
+			user_id = user.id
+			def f(user_id=user_id, id=id):
 				while True:
 					try:
 						bot.delete_message(user_id, id)
@@ -356,6 +513,7 @@ class MyReceiver(core.Receiver):
 		message_queue.delete(lambda item, user_id=user.id: item.user_id == user_id)
 		if not delete_out:
 			return
+		# delete all (pending) outgoing messages written by the user
 		def f(item):
 			if item.msid is None:
 				return False
@@ -404,8 +562,6 @@ def cmd_tripcode(ev, arg):
 	else:
 		send_answer(ev, core.set_tripcode(c_user, arg))
 
-cmd_settripcode = cmd_tripcode # legacy alias
-
 
 def cmd_modhelp(ev):
 	send_answer(ev, rp.Reply(rp.types.HELP_MODERATOR), True)
@@ -443,7 +599,7 @@ def cmd_admin(ev, arg):
 	arg = arg.lstrip("@")
 	send_answer(ev, core.promote_user(c_user, arg, RANKS.admin), True)
 
-def cmd_warn(ev, delete=False):
+def cmd_warn(ev, delete=False, only_delete=False):
 	c_user = UserContainer(ev.from_user)
 
 	if ev.reply_to_message is None:
@@ -452,9 +608,15 @@ def cmd_warn(ev, delete=False):
 	reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
 	if reply_msid is None:
 		return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
-	send_answer(ev, core.warn_user(c_user, reply_msid, delete), True)
+	if only_delete:
+		r = core.delete_message(c_user, reply_msid)
+	else:
+		r = core.warn_user(c_user, reply_msid, delete)
+	send_answer(ev, r, True)
 
-cmd_delete = lambda ev: cmd_warn(ev, True)
+cmd_delete = lambda ev: cmd_warn(ev, delete=True)
+
+cmd_remove = lambda ev: cmd_warn(ev, only_delete=True)
 
 @takesArgument()
 def cmd_uncooldown(ev, arg):
@@ -492,7 +654,7 @@ def cmd_blacklist(ev, arg):
 		return send_answer(ev, rp.Reply(rp.types.ERR_NOT_IN_CACHE), True)
 	return send_answer(ev, core.blacklist_user(c_user, reply_msid, arg), True)
 
-def cmd_plusone(ev):
+def plusone(ev):
 	c_user = UserContainer(ev.from_user)
 	if ev.reply_to_message is None:
 		return send_answer(ev, rp.Reply(rp.types.ERR_NO_REPLY), True)
@@ -505,27 +667,55 @@ def cmd_plusone(ev):
 
 def relay(ev):
 	# handle commands and karma giving
-	if ev.content_type == "text" and ev.text.startswith("/"):
-		pos = ev.text.find(" ") if " " in ev.text else len(ev.text)
-		c = ev.text[1:pos].lower()
-		if c in registered_commands.keys():
-			registered_commands[c](ev)
-		return
-	elif ev.content_type == "text" and ev.text.strip() == "+1":
-		return cmd_plusone(ev)
+	if ev.content_type == "text":
+		if ev.text.startswith("/"):
+			c, _ = split_command(ev.text)
+			if c in registered_commands.keys():
+				registered_commands[c](ev)
+			return
+		elif ev.text.strip() == "+1":
+			return plusone(ev)
+	# manually handle signing / tripcodes for media since captions don't count for commands
+	if not is_forward(ev) and ev.content_type in CAPTIONABLE_TYPES and (ev.caption or "").startswith("/"):
+		c, arg = split_command(ev.caption)
+		if c in ("s", "sign"):
+			return relay_inner(ev, caption_text=arg, signed=True)
+		elif c in ("t", "tsign"):
+			return relay_inner(ev, caption_text=arg, tripcode=True)
 
-	# filter disallowed media types
-	if not allow_documents and ev.content_type == "document" and ev.document.mime_type not in ("image/gif", "video/mp4"):
-		return
+	relay_inner(ev)
 
-	is_media = (ev.forward_from is not None or
-		ev.forward_from_chat is not None or
-		ev.content_type in ("photo", "document", "video", "sticker"))
-	msid = core.prepare_user_message(UserContainer(ev.from_user), calc_spam_score(ev), is_media)
+# relay the message `ev` to other users in the chat
+# `caption_text` can be a FormattedMessage that overrides the caption of media
+# `signed` and `tripcode` indicate if the message is signed or tripcoded respectively
+def relay_inner(ev, *, caption_text=None, signed=False, tripcode=False):
+	is_media = is_forward(ev) or ev.content_type in MEDIA_FILTER_TYPES
+	msid = core.prepare_user_message(UserContainer(ev.from_user), calc_spam_score(ev),
+		is_media=is_media, signed=signed, tripcode=tripcode)
 	if msid is None or isinstance(msid, rp.Reply):
 		return send_answer(ev, msid) # don't relay message, instead reply
 
 	user = db.getUser(id=ev.from_user.id)
+
+	# apply text formatting to text or caption (if media)
+	ev_tosend = ev
+	force_caption = None
+	if is_forward(ev):
+		pass # leave message alone
+	elif ev.content_type == "text" or ev.caption is not None or caption_text is not None:
+		fmt = FormattedMessageBuilder(caption_text, ev.caption, ev.text)
+		formatter_replace_links(ev, fmt)
+		formatter_network_links(fmt)
+		if signed:
+			formatter_signed_message(user, fmt)
+		elif tripcode:
+			formatter_tripcoded_message(user, fmt)
+		fmt = fmt.build()
+		# either replace whole message or just the caption
+		if ev.content_type == "text":
+			ev_tosend = fmt or ev_tosend
+		else:
+			force_caption = fmt
 
 	# find out which message is being replied to
 	reply_msid = None
@@ -543,40 +733,19 @@ def relay(ev):
 			ch.saveMapping(user2.id, msid, ev.message_id)
 			continue
 
-		send_to_single(ev, msid, user2, reply_msid)
+		send_to_single(ev_tosend, msid, user2,
+			reply_msid=reply_msid, force_caption=force_caption)
 
 @takesArgument()
 def cmd_sign(ev, arg):
-	c_user = UserContainer(ev.from_user)
-	reply_msid = None
-	if ev.reply_to_message is not None:
-		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
-		if reply_msid is None:
-			logging.warning("Message replied to not found in cache")
-
-	msid = core.send_signed_user_message(c_user, calc_spam_score(ev), arg, reply_msid)
-	if isinstance(msid, rp.Reply):
-		return send_answer(ev, msid, True)
-
-	# save the original message in the mapping, this isn't done inside MyReceiver.reply()
-	# since there's no "original message" at that point
-	ch.saveMapping(c_user.id, msid, ev.message_id)
+	ev.text = arg
+	relay_inner(ev, signed=True)
 
 cmd_s = cmd_sign # alias
 
 @takesArgument()
 def cmd_tsign(ev, arg):
-	c_user = UserContainer(ev.from_user)
-	reply_msid = None
-	if ev.reply_to_message is not None:
-		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
-		if reply_msid is None:
-			logging.warning("Message replied to not found in cache")
-
-	msid = core.send_signed_user_message(c_user, calc_spam_score(ev), arg, reply_msid, tripcode=True)
-	if isinstance(msid, rp.Reply):
-		return send_answer(ev, msid, True)
-
-	ch.saveMapping(c_user.id, msid, ev.message_id)
+	ev.text = arg
+	relay_inner(ev, tripcode=True)
 
 cmd_t = cmd_tsign # alias

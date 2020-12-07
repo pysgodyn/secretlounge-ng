@@ -37,7 +37,7 @@ def dump(obj, name=None, r=False):
 			print("%s%s = %r" % (name, e, ev))
 
 # Program version
-VERSION = "1.6"
+VERSION = "1.7"
 
 # Ranks
 RANKS = Enum({
@@ -59,13 +59,12 @@ KARMA_WARN_PENALTY = 10
 
 # Spam limits
 SPAM_LIMIT = 3
-SPAM_LIMIT_HIT = 5
+SPAM_LIMIT_HIT = 6
 SPAM_INTERVAL_SECONDS = 5
-SIGN_INTERVAL_SECONDS = 600
 
 # Spam score calculation
 SCORE_STICKER = 1.5
 SCORE_BASE_MESSAGE = 0.75
-SCORE_BASE_FORWARD = 1.1
+SCORE_BASE_FORWARD = 1.25
 SCORE_TEXT_CHARACTER = 0.002
 SCORE_TEXT_LINEBREAK = 0.1

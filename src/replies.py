@@ -29,8 +29,6 @@ types = NumericEnum([
 	"CUSTOM",
 	"SUCCESS",
 	"BOOLEAN_CONFIG",
-	"SIGNED_MSG",
-	"TSIGNED_MSG",
 
 	"CHAT_JOIN",
 	"CHAT_LEAVE",
@@ -90,9 +88,6 @@ format_strs = {
 	types.SUCCESS: "☑",
 	types.BOOLEAN_CONFIG: lambda enabled, **_:
 		"<b>{description!x}</b>: " + (enabled and "enabled" or "disabled"),
-	types.SIGNED_MSG: "{text!x} <a href=\"tg://user?id={user_id}\">~~{user_text!x}</a>",
-	types.TSIGNED_MSG: "<b>{tripname!x}</b> <code>{tripcode!x}</code>:\n"+
-		"{text!x}",
 
 	types.CHAT_JOIN: em("You joined the chat!"),
 	types.CHAT_LEAVE: em("You left the chat!"),
@@ -110,7 +105,7 @@ format_strs = {
 		em( "You've just been given sweet karma! (check /info to see your karma"+
 			" or /toggleKarma to turn these notifications off)" ),
 	types.TRIPCODE_INFO: lambda tripcode, **_:
-		"<b>tripcode</b>: " + ("<code>{tripcode!x}</code>" if tripcode is not None else "unset" ),
+		"<b>tripcode</b>: " + ("<code>{tripcode!x}</code>" if tripcode is not None else "unset"),
 	types.TRIPCODE_SET: em("Tripcode set. It will appear as: ") + "<b>{tripname!x}</b> <code>{tripcode!x}</code>",
 
 	types.ERR_COMMAND_DISABLED: em("This command has been disabled."),
@@ -123,7 +118,7 @@ format_strs = {
 	types.ERR_NOT_IN_COOLDOWN: em("This user is not in a cooldown right now."),
 	types.ERR_BLACKLISTED: lambda reason, contact, **_:
 		em( "You've been blacklisted" + (reason and " for {reason!x}" or "") )+
-		( em("\ncontact:") + " {contact}" ) if contact else "",
+		( em("\ncontact:") + " {contact}" if contact else "" ),
 	types.ERR_ALREADY_UPVOTED: em("You have already upvoted this message."),
 	types.ERR_UPVOTE_OWN_MESSAGE: em("You can't upvote your own message."),
 	types.ERR_SPAMMY: em("Your message has not been sent. Avoid sending messages too fast, try again later."),
@@ -175,8 +170,13 @@ format_strs = {
 		"  /blacklist [reason] - blacklist the user who sent this message",
 }
 
+localization = {}
+
 def formatForTelegram(m):
-	s = format_strs[m.type]
+	s = localization.get(m.type)
+	if s is None:
+		s = format_strs[m.type]
 	if type(s).__name__ == "function":
 		s = s(**m.kwargs)
-	return CustomFormatter().format(s, **m.kwargs)
+	cls = localization.get("_FORMATTER_", CustomFormatter)
+	return cls().format(s, **m.kwargs)
