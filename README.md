@@ -21,6 +21,7 @@ Message [@BotFather](https://t.me/BotFather) to configure your bot as follows:
 ```
 start - Join the chat (start receiving messages)
 stop - Leave the chat (stop receiving messages)
+rules - Show welcome message (Alias of motd)
 users - Find out how many users are in the chat
 info - Get info about your account
 sign - Sign a message with your username
@@ -31,6 +32,8 @@ motd - Show the welcome message
 version - Get version & source code of this bot
 modhelp - Show commands available to moderators
 adminhelp - Show commands available to admins
+ownerhelp - Show commands available to owners
+sysophelp - Show commands available to sysop
 toggledebug - Toggle debug mode (sends back all messages to you)
 togglekarma - Toggle karma notifications
 tripcode - Show or set a tripcode for your messages
