@@ -741,7 +741,7 @@ def cmd_preblacklist(ev, arg):
 
 cmd_preban = cmd_preblacklist # alias
 
-def cmd_plusone(ev):
+def plusone(ev):
 	c_user = UserContainer(ev.from_user)
 	if ev.reply_to_message is None:
 		return send_answer(ev, rp.Reply(rp.types.ERR_NO_REPLY), True)
