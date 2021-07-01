@@ -210,8 +210,13 @@ format_strs = {
 		"<i>Along with all other commands</i>\n",
 }
 
+localization = {}
+
 def formatForTelegram(m):
-	s = format_strs[m.type]
+	s = localization.get(m.type)
+	if s is None:
+		s = format_strs[m.type]
 	if type(s).__name__ == "function":
 		s = s(**m.kwargs)
-	return CustomFormatter().format(s, **m.kwargs)
+	cls = localization.get("_FORMATTER_", CustomFormatter)
+	return cls().format(s, **m.kwargs)

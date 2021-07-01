@@ -42,6 +42,10 @@ def init(config, _db, _ch):
 			logging.warning("AFK timeout cannot equal 0 days")
 	sign_interval = timedelta(seconds=int(config.get("sign_limit_interval", 600)))
 
+	if config.get("locale"):
+		rp.localization = __import__("src.replies_" + config["locale"],
+			fromlist=["localization"]).localization
+
 	# initialize db if empty
 	if db.getSystemConfig() is None:
 		c = SystemConfig()
@@ -622,6 +626,8 @@ def prepare_user_message(user: User, msg_score, *, is_media=False, is_voice=Fals
 	# prerequisites
 	if user.isInCooldown():
 		return rp.Reply(rp.types.ERR_COOLDOWN, until=user.cooldownUntil)
+	if (signed or tripcode) and not enable_signing:
+		return rp.Reply(rp.types.ERR_COMMAND_DISABLED)
 	if tripcode and user.tripcode is None:
 		return rp.Reply(rp.types.ERR_NO_TRIPCODE)
 	if is_media and user.rank < RANKS.mod and media_limit_period is not None:
