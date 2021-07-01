@@ -19,6 +19,10 @@ allow_remove_command: false
 # limit how long (days) a joined user can be inactive
 #afk_timeout: 30
 
+# Prevent users with a larger ID from joining
+# Note: Telegram IDs are not truly sequential. This may have unintended effects
+#id_maximum: 1700000000
+
 # enable signing messages using /sign or /tsign as well as setting a tripcode
 enable_signing: false
 # limit usage of /sign to once in every interval (seconds)

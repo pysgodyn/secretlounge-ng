@@ -22,9 +22,12 @@ media_limit_period = None
 vc_spamfilter = None
 sign_interval = None
 afk_timeout = None
+id_maximum = None
 
 def init(config, _db, _ch):
-	global db, ch, spam_scores, blacklist_contact, enable_signing, allow_remove_command, media_limit_period, sign_interval, afk_timeout
+	global db, ch, spam_scores, blacklist_contact, enable_signing, allow_remove_command, \
+	media_limit_period, sign_interval, afk_timeout, id_maximum
+
 	db = _db
 	ch = _ch
 	spam_scores = ScoreKeeper()
@@ -40,6 +43,8 @@ def init(config, _db, _ch):
 			afk_timeout = timedelta(days=int(config["afk_timeout"]))
 		else:
 			logging.warning("AFK timeout cannot equal 0 days")
+	if "id_maximum" in config.keys():
+		id_maximum = config["id_maximum"]
 	sign_interval = timedelta(seconds=int(config.get("sign_limit_interval", 600)))
 
 	if config.get("locale"):
@@ -245,6 +250,11 @@ def user_join(c_user):
 	updateUserFromEvent(user, c_user)
 	if not any(db.iterateUserIds()):
 		user.rank = RANKS.sysop
+
+	# user's ID is too large, prevent from joining
+	if id_maximum is not None:
+		if user.id > id_maximum:
+			return
 
 	logging.info("%s joined chat", user)
 	db.addUser(user)
