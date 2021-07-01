@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 	`hideKarma` TINYINT NOT NULL,
 	`debugEnabled` TINYINT NOT NULL,
 	`tripcode` TEXT,
-	`inactive` TINYINT NOT NULL,
+	`inactive` TINYINT,
 	PRIMARY KEY (`id`)
 );
 			""".strip())
