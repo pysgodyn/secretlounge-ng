@@ -17,7 +17,8 @@ HIDE_FORWARD_FROM = set([
 	"anonymous_forwarder_nashenasbot", "anonymous_forward_bot", "mirroring_bot",
 	"anonymizbot", "ForwardsCoverBot", "anonymousmcjnbot", "MirroringBot",
 	"anonymousforwarder_bot", "anonymousForwardBot", "anonymous_forwarder_bot",
-	"anonymousforwardsbot", "HiddenlyBot", "ForwardCoveredBot",
+	"anonymousforwardsbot", "HiddenlyBot", "ForwardCoveredBot", "anonym2bot",
+	"AntiForwardedBot", "noforward_bot", "Anonymous_telegram_bot",
 ])
 VENUE_PROPS = ("title", "address", "foursquare_id", "foursquare_type", "google_place_id", "google_place_type")
 
@@ -39,6 +40,8 @@ def init(config, _db, _ch):
 		exit(1)
 
 	logging.getLogger("urllib3").setLevel(logging.WARNING) # very noisy with debug otherwise
+	telebot.apihelper.READ_TIMEOUT = 20
+
 	bot = telebot.TeleBot(config["bot_token"], threaded=False)
 	db = _db
 	ch = _ch
@@ -80,7 +83,7 @@ def set_handler(func, *args, **kwargs):
 def run():
 	while True:
 		try:
-			bot.polling(none_stop=True)
+			bot.polling(none_stop=True, long_polling_timeout=45)
 		except Exception as e:
 			# you're not supposed to call .polling() more than once but I'm left with no choice
 			logging.warning("%s while polling Telegram, retrying.", type(e).__name__)
