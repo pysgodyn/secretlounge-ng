@@ -643,7 +643,11 @@ def prepare_user_message(user: User, msg_score, *, is_media=False, is_voice=Fals
 	if is_media and user.rank < RANKS.mod and media_limit_period is not None:
 		if (datetime.now() - user.joined) < media_limit_period:
 			limitUntil = media_limit_period - (datetime.now() - user.joined)
-			return rp.Reply(rp.types.ERR_MEDIA_LIMIT, until=(round(limitUntil.seconds / 3600, 1)))
+			if limitUntil.days:
+				waitTime = (str(limitUntil.days) + " days and " + str(round(limitUntil.seconds / 3600, 1)))
+			else:
+				waitTime = (str(round(limitUntil.seconds / 3600, 1)))
+			return rp.Reply(rp.types.ERR_MEDIA_LIMIT, until=waitTime)
 	if is_voice and vc_spamfilter is not False:
 		first_used = voice_first_used.get(user.id, None)
 		count = voice_count.get(user.id, 0)

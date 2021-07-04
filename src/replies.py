@@ -140,8 +140,7 @@ format_strs = {
 		"\n<code>name#pass</code>" + em("."),
 	types.ERR_NO_TRIPCODE: em("You don't have a tripcode set."),
 	types.ERR_MEDIA_LIMIT: lambda until, **_:
-		em("You can't send media or forward messages at this time, try again") +
-		( em(" {until} hours from now.")) if until else " later.",
+		em("You can't send media or forward messages at this time, try again {until} hours from now."),
 	types.ERR_INVALID_PREBAN_FORMAT:
 		em("Given format is not valid, the format is ")+
 		"<code>/preblacklist [USER_ID]:[REASON]</code>" + em("."),
